@@ -13,13 +13,22 @@
 - **Projet** : Xcode project (.xcodeproj)
 
 ## Dernière mise à jour
-2026-03-27 — Initialisation
+2026-03-27 — Save après validation du plan d'action
 
 ## Ce qu'on a fait
+- 2026-03-27 : Plan d'action validé — 6 phases définies (structure Xcode, entry point, SessionMonitor, NotificationManager, AppDelegate, test/commit)
 - 2026-03-27 : Initialisation du projet, création du dépôt Git et du CONTEXT.md
 
 ## Où on en est
-Le projet vient d'être initialisé. Aucun code n'a encore été écrit. La spécification est complète et détaillée. On va créer un plan d'action puis coder l'app.
+Le projet est initialisé avec Git. La spécification complète est définie (voir le prompt initial). Un plan d'action en 6 phases a été présenté et validé par l'utilisateur. Aucun code Swift n'a encore été écrit. Prêt à coder.
+
+### Plan d'action validé
+1. **Phase 1** : Structure Xcode (dossiers, project.pbxproj, Info.plist, entitlements)
+2. **Phase 2** : ContextWatchApp.swift — entry point @main
+3. **Phase 3** : SessionMonitor.swift — FSEventStream, scan .jsonl, calcul %
+4. **Phase 4** : NotificationManager.swift — UNUserNotificationCenter, seuils 80/90/100%
+5. **Phase 5** : AppDelegate.swift — NSStatusItem, menu, assemblage de tout
+6. **Phase 6** : Test compilation + commit final
 
 ## Architecture et décisions
 - **AppKit pur** : pas de SwiftUI, pour compatibilité et contrôle total sur la menu bar
