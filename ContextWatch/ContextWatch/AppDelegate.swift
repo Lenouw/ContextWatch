@@ -8,36 +8,23 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
     // MARK: - Composants
 
-    /// Icône dans la menu bar
     private var statusItem: NSStatusItem!
-
-    /// Moniteur de session Claude Code
     private let sessionMonitor = SessionMonitor()
-
-    /// Gestionnaire de notifications système
     private let notificationManager = NotificationManager()
 
     // MARK: - Cycle de vie
 
     func applicationDidFinishLaunching(_ notification: Notification) {
-        // Créer le status item dans la menu bar (taille variable selon le texte)
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
+        updateStatusItemTitle(sessions: [])
+        buildMenu(sessions: [])
 
-        // Affichage initial : aucune session
-        updateStatusItemTitle(percentage: 0, sessionPath: nil)
-
-        // Construire le menu contextuel
-        buildMenu()
-
-        // Demander la permission pour les notifications
         notificationManager.requestPermission()
 
-        // Configurer le callback du moniteur de session
-        sessionMonitor.onUpdate = { [weak self] percentage, sizeKB, sessionPath in
-            self?.handleUpdate(percentage: percentage, sizeKB: sizeKB, sessionPath: sessionPath)
+        sessionMonitor.onUpdate = { [weak self] sessions in
+            self?.handleUpdate(sessions: sessions)
         }
 
-        // Démarrer la surveillance de ~/.claude/projects/
         sessionMonitor.startMonitoring()
     }
 
@@ -45,103 +32,94 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         sessionMonitor.stopMonitoring()
     }
 
-    // MARK: - Mise à jour de l'affichage
+    // MARK: - Mise à jour
 
-    /// Appelé quand le moniteur détecte un changement de session ou de taille
-    private func handleUpdate(percentage: Int, sizeKB: Double, sessionPath: String?) {
-        updateStatusItemTitle(percentage: percentage, sessionPath: sessionPath)
-        buildMenu()
-        notificationManager.evaluate(percentage: percentage, sessionPath: sessionPath)
+    private func handleUpdate(sessions: [SessionInfo]) {
+        updateStatusItemTitle(sessions: sessions)
+        buildMenu(sessions: sessions)
+        notificationManager.evaluate(sessions: sessions)
     }
 
-    /// Met à jour le titre du status item avec l'icône appropriée et le pourcentage
-    private func updateStatusItemTitle(percentage: Int, sessionPath: String?) {
+    /// Affiche la session la plus critique dans la menu bar avec couleur
+    private func updateStatusItemTitle(sessions: [SessionInfo]) {
         guard let button = statusItem.button else { return }
 
-        // Aucune session trouvée → afficher "—"
-        guard sessionPath != nil else {
-            button.title = "◯ —"
+        guard let worst = sessions.max(by: { $0.percentage < $1.percentage }) else {
+            button.attributedTitle = NSAttributedString(
+                string: "◯ —",
+                attributes: [.foregroundColor: NSColor.secondaryLabelColor]
+            )
             return
         }
 
-        // Icône selon le niveau de remplissage
-        let icon: String
-        switch percentage {
-        case 0...60:
-            icon = "◯"     // Vide / confortable
-        case 61...79:
-            icon = "◔"     // Un quart rempli
-        case 80...89:
-            icon = "◑"     // À moitié — attention
-        case 90...99:
-            icon = "◕"     // Presque plein — urgent
-        default:
-            icon = "●"     // Plein
-        }
-
-        button.title = "\(icon) \(percentage)%"
+        let text = "\(worst.icon) \(worst.percentage)%"
+        button.attributedTitle = NSAttributedString(
+            string: text,
+            attributes: [.foregroundColor: colorForPercentage(worst.percentage)]
+        )
     }
 
-    // MARK: - Construction du menu
+    /// Couleur selon le niveau : vert → jaune → orange → rouge
+    private func colorForPercentage(_ pct: Int) -> NSColor {
+        switch pct {
+        case 0...60:
+            return NSColor(red: 0.30, green: 0.78, blue: 0.47, alpha: 1.0) // Vert
+        case 61...79:
+            return NSColor(red: 0.95, green: 0.77, blue: 0.06, alpha: 1.0) // Jaune
+        case 80...89:
+            return NSColor(red: 0.96, green: 0.55, blue: 0.18, alpha: 1.0) // Orange
+        default:
+            return NSColor(red: 0.92, green: 0.26, blue: 0.21, alpha: 1.0) // Rouge
+        }
+    }
 
-    /// Construit le menu contextuel du status item
-    private func buildMenu() {
+    // MARK: - Menu
+
+    private func buildMenu(sessions: [SessionInfo]) {
         let menu = NSMenu()
 
-        // — Session active —
-        let sessionName = sessionMonitor.activeSessionShortName
-        let sessionItem = NSMenuItem(
-            title: "Session active : \(sessionName)",
-            action: nil,
-            keyEquivalent: ""
-        )
-        sessionItem.isEnabled = false
-        menu.addItem(sessionItem)
+        if sessions.isEmpty {
+            let noSession = NSMenuItem(title: "Aucune session active", action: nil, keyEquivalent: "")
+            noSession.isEnabled = false
+            menu.addItem(noSession)
+        } else {
+            // En-tête
+            let header = NSMenuItem(
+                title: sessions.count == 1
+                    ? "1 session active"
+                    : "\(sessions.count) sessions actives",
+                action: nil, keyEquivalent: ""
+            )
+            header.isEnabled = false
+            menu.addItem(header)
+            menu.addItem(.separator())
 
-        // — Contexte : pourcentage et taille —
-        let sizeStr = String(format: "%.0f", sessionMonitor.activeSessionSizeKB)
-        let maxStr = String(format: "%.0f", SessionMonitor.maxContextSizeKB)
-        let contextItem = NSMenuItem(
-            title: "Contexte : \(sessionMonitor.percentage)% (\(sizeStr) Ko / \(maxStr) Ko)",
-            action: nil,
-            keyEquivalent: ""
-        )
-        contextItem.isEnabled = false
-        menu.addItem(contextItem)
+            // Une ligne par session, triée par % décroissant
+            let sorted = sessions.sorted { $0.percentage > $1.percentage }
+            for session in sorted {
+                addSessionItems(to: menu, session: session)
+            }
+        }
 
-        // — Option cachée : taille exacte (visible avec touche Option) —
-        // Remplace la ligne "Contexte" quand l'utilisateur tient Option
-        let calibrationItem = NSMenuItem(
-            title: "Taille exacte : \(String(format: "%.2f", sessionMonitor.activeSessionSizeKB)) Ko",
-            action: nil,
-            keyEquivalent: ""
-        )
-        calibrationItem.isEnabled = false
-        calibrationItem.isAlternate = true
-        calibrationItem.keyEquivalentModifierMask = .option
-        menu.addItem(calibrationItem)
-
-        // — Dernière mise à jour —
+        // Dernière mise à jour
+        menu.addItem(.separator())
         let timeStr: String
         if let lastUpdate = sessionMonitor.lastUpdate {
-            let formatter = DateFormatter()
-            formatter.dateFormat = "HH:mm:ss"
-            timeStr = formatter.string(from: lastUpdate)
+            let fmt = DateFormatter()
+            fmt.dateFormat = "HH:mm:ss"
+            timeStr = fmt.string(from: lastUpdate)
         } else {
             timeStr = "—"
         }
         let updateItem = NSMenuItem(
             title: "Dernière mise à jour : \(timeStr)",
-            action: nil,
-            keyEquivalent: ""
+            action: nil, keyEquivalent: ""
         )
         updateItem.isEnabled = false
         menu.addItem(updateItem)
 
-        // — Séparateur —
+        // Actions
         menu.addItem(.separator())
-
-        // — Ouvrir le dossier dans le Finder —
         let openItem = NSMenuItem(
             title: "Ouvrir ~/.claude/projects/",
             action: #selector(openProjectsFolder),
@@ -150,10 +128,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         openItem.target = self
         menu.addItem(openItem)
 
-        // — Séparateur —
         menu.addItem(.separator())
-
-        // — Quitter —
         let quitItem = NSMenuItem(
             title: "Quitter",
             action: #selector(quit),
@@ -165,25 +140,76 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         statusItem.menu = menu
     }
 
-    // MARK: - Actions du menu
+    /// Ajoute les items de menu pour une session, avec code couleur sélectif
+    private func addSessionItems(to menu: NSMenu, session: SessionInfo) {
+        // On garde l'item "enabled" avec une action bidon pour que macOS
+        // n'écrase pas nos couleurs (isEnabled=false grise tout le texte)
+        let item = NSMenuItem(title: "", action: #selector(noop), keyEquivalent: "")
+        item.target = self
 
-    /// Ouvre le dossier ~/.claude/projects/ dans le Finder
+        let font = NSFont.menuFont(ofSize: 13)
+        let boldFont = NSFont.boldSystemFont(ofSize: 13)
+        let smallFont = NSFont.menuFont(ofSize: 11)
+        let color = colorForPercentage(session.percentage)
+
+        let str = NSMutableAttributedString()
+
+        // Icône en couleur
+        str.append(NSAttributedString(string: "\(session.icon) ", attributes: [
+            .foregroundColor: color, .font: font
+        ]))
+
+        // Nom du projet — blanc franc, bien lisible
+        str.append(NSAttributedString(string: session.displayName, attributes: [
+            .foregroundColor: NSColor.white, .font: boldFont
+        ]))
+
+        // Séparateur
+        str.append(NSAttributedString(string: "  —  ", attributes: [
+            .foregroundColor: NSColor(white: 0.55, alpha: 1.0), .font: font
+        ]))
+
+        // Pourcentage en couleur + gras
+        str.append(NSAttributedString(string: "\(session.percentage)%", attributes: [
+            .foregroundColor: color, .font: boldFont
+        ]))
+
+        // Tokens — gris clair, lisible
+        str.append(NSAttributedString(string: "  (\(session.inputTokensFormatted) / \(session.maxTokensFormatted))", attributes: [
+            .foregroundColor: NSColor(white: 0.60, alpha: 1.0), .font: smallFont
+        ]))
+
+        // Modèle — gris moyen
+        str.append(NSAttributedString(string: "  \(session.modelShortName)", attributes: [
+            .foregroundColor: NSColor(white: 0.50, alpha: 1.0), .font: smallFont
+        ]))
+
+        item.attributedTitle = str
+        menu.addItem(item)
+
+        // Alternate (Option) : détails techniques pour calibration
+        let altTitle = "   ↳ \(session.inputTokens) tokens  —  modèle : \(session.modelName)"
+        let altItem = NSMenuItem(title: altTitle, action: nil, keyEquivalent: "")
+        altItem.isEnabled = false
+        altItem.isAlternate = true
+        altItem.keyEquivalentModifierMask = .option
+        menu.addItem(altItem)
+    }
+
+    // MARK: - Actions
+
     @objc private func openProjectsFolder() {
         let home = FileManager.default.homeDirectoryForCurrentUser.path
         let path = "\(home)/.claude/projects"
-
-        // Créer le dossier s'il n'existe pas encore
         if !FileManager.default.fileExists(atPath: path) {
-            try? FileManager.default.createDirectory(
-                atPath: path,
-                withIntermediateDirectories: true
-            )
+            try? FileManager.default.createDirectory(atPath: path, withIntermediateDirectories: true)
         }
-
         NSWorkspace.shared.open(URL(fileURLWithPath: path))
     }
 
-    /// Quitte l'application
+    /// Action bidon pour garder les items de menu "enabled" (et préserver les couleurs)
+    @objc private func noop() {}
+
     @objc private func quit() {
         NSApplication.shared.terminate(self)
     }

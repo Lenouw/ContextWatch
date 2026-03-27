@@ -2,33 +2,32 @@ import Foundation
 import UserNotifications
 
 /// Gère les notifications système pour les seuils de remplissage du contexte.
-/// Utilise le framework UserNotifications (UNUserNotificationCenter).
+/// Supporte plusieurs sessions simultanées — chaque projet a son propre état de notification.
 class NotificationManager: NSObject, UNUserNotificationCenterDelegate {
 
-    // MARK: - Seuils de notification
+    // MARK: - Seuils
 
-    /// Seuils qui déclenchent une notification (en pourcentage)
     private enum Threshold: Int, CaseIterable {
-        case warning = 80   // Avertissement
-        case urgent = 90    // Urgent
-        case full = 100     // Contexte plein
+        case warning = 80
+        case urgent  = 90
+        case full    = 100
     }
 
     // MARK: - Propriétés
 
-    /// Centre de notifications système
     private let center = UNUserNotificationCenter.current()
 
-    /// Seuils déjà notifiés pour la session courante
-    private var notifiedThresholds: Set<Int> = []
+    /// Seuils déjà notifiés, indexés par chemin du dossier projet
+    private var notifiedThresholds: [String: Set<Int>] = [:]
 
-    /// Chemin de la session pour laquelle on a notifié
-    private var notifiedSessionPath: String?
+    /// Chemin du .jsonl actif qu'on surveillait la dernière fois, par projet
+    /// → permet de détecter si une nouvelle session a démarré dans le même projet
+    private var lastKnownJSONLPath: [String: String] = [:]
 
-    /// Timer pour la notification répétée à 100%
-    private var fullContextTimer: Timer?
+    /// Timers pour la notification répétée à 100%, par projet
+    private var fullContextTimers: [String: Timer] = [:]
 
-    // MARK: - Initialisation
+    // MARK: - Init
 
     override init() {
         super.init()
@@ -37,116 +36,128 @@ class NotificationManager: NSObject, UNUserNotificationCenterDelegate {
 
     // MARK: - Permission
 
-    /// Demande la permission d'envoyer des notifications au premier lancement
     func requestPermission() {
         center.requestAuthorization(options: [.alert, .sound, .badge]) { granted, error in
             if let error = error {
                 print("[ContextWatch] Erreur permission notifications : \(error.localizedDescription)")
             }
-            if granted {
-                print("[ContextWatch] Notifications autorisées")
-            }
         }
     }
 
-    // MARK: - Évaluation des seuils
+    // MARK: - Évaluation multi-sessions
 
-    /// Évalue le pourcentage et envoie les notifications appropriées.
-    /// Ne répète pas une notification pour le même seuil sauf si la session change.
-    func evaluate(percentage: Int, sessionPath: String?) {
-        // Si la session a changé → réinitialiser les seuils notifiés
-        if sessionPath != notifiedSessionPath {
-            notifiedThresholds.removeAll()
-            notifiedSessionPath = sessionPath
-            stopFullContextTimer()
+    /// Évalue toutes les sessions actives et envoie les notifications appropriées.
+    /// Chaque projet est suivi indépendamment.
+    func evaluate(sessions: [SessionInfo]) {
+        let activePaths = Set(sessions.map { $0.projectFolderPath })
+
+        // Nettoyer les projets qui ne sont plus actifs
+        for key in notifiedThresholds.keys where !activePaths.contains(key) {
+            notifiedThresholds.removeValue(forKey: key)
+            lastKnownJSONLPath.removeValue(forKey: key)
+            stopTimer(for: key)
+        }
+
+        // Évaluer chaque session
+        for session in sessions {
+            evaluateSession(session)
+        }
+    }
+
+    // MARK: - Évaluation d'une session
+
+    private func evaluateSession(_ session: SessionInfo) {
+        let key = session.projectFolderPath
+
+        // Si le fichier .jsonl a changé → nouvelle conversation dans ce projet
+        // On remet les compteurs à zéro pour ce projet
+        if let knownPath = lastKnownJSONLPath[key], knownPath != session.path {
+            notifiedThresholds[key] = []
+            stopTimer(for: key)
+        }
+        lastKnownJSONLPath[key] = session.path
+
+        // Initialiser le Set si nécessaire
+        if notifiedThresholds[key] == nil {
+            notifiedThresholds[key] = []
         }
 
         // Vérifier chaque seuil
         for threshold in Threshold.allCases {
-            if percentage >= threshold.rawValue && !notifiedThresholds.contains(threshold.rawValue) {
-                sendNotification(for: threshold)
-                notifiedThresholds.insert(threshold.rawValue)
+            let alreadyNotified = notifiedThresholds[key]!.contains(threshold.rawValue)
+
+            if session.percentage >= threshold.rawValue && !alreadyNotified {
+                sendNotification(for: threshold, session: session)
+                notifiedThresholds[key]!.insert(threshold.rawValue)
+            }
+
+            // Si le pourcentage redescend sous un seuil, on le retire
+            // (permet de re-notifier si ça remonte — ex: nouvelle session dans le même projet)
+            if session.percentage < threshold.rawValue {
+                notifiedThresholds[key]!.remove(threshold.rawValue)
             }
         }
 
-        // Gérer la répétition à 100% (toutes les 60 secondes)
-        if percentage >= 100 {
-            startFullContextTimerIfNeeded()
+        // Timer répété à 100%
+        if session.percentage >= 100 {
+            startTimerIfNeeded(for: key, session: session)
         } else {
-            stopFullContextTimer()
-        }
-
-        // Si le pourcentage redescend sous un seuil, le retirer des notifiés
-        // → permet de re-notifier si ça remonte (ex: nouvelle session)
-        for threshold in Threshold.allCases {
-            if percentage < threshold.rawValue {
-                notifiedThresholds.remove(threshold.rawValue)
-            }
+            stopTimer(for: key)
         }
     }
 
     // MARK: - Envoi des notifications
 
-    /// Envoie une notification pour un seuil donné
-    private func sendNotification(for threshold: Threshold) {
+    private func sendNotification(for threshold: Threshold, session: SessionInfo) {
         let content = UNMutableNotificationContent()
-        content.title = "ContextWatch"
+        content.title = "ContextWatch — \(session.displayName)"
 
         switch threshold {
         case .warning:
-            content.body = "Contexte Claude Code à 80% — pense à faire un save"
+            content.body = "Contexte à 80% — pense à faire un save"
             content.sound = .default
         case .urgent:
-            content.body = "Contexte Claude Code à 90% — save urgent !"
+            content.body = "Contexte à 90% — save urgent !"
             content.sound = .default
         case .full:
             content.body = "Contexte plein — plus possible d'écrire !"
             content.sound = .default
         }
 
-        // Notification urgente pour 90% et 100%
         if #available(macOS 12.0, *) {
-            switch threshold {
-            case .warning:
-                content.interruptionLevel = .timeSensitive
-            case .urgent, .full:
-                content.interruptionLevel = .timeSensitive
-            }
+            content.interruptionLevel = .timeSensitive
         }
 
         let request = UNNotificationRequest(
             identifier: "contextwatch-\(threshold.rawValue)-\(UUID().uuidString)",
             content: content,
-            trigger: nil // Envoi immédiat
+            trigger: nil
         )
 
         center.add(request) { error in
             if let error = error {
-                print("[ContextWatch] Erreur envoi notification : \(error.localizedDescription)")
+                print("[ContextWatch] Erreur notification : \(error.localizedDescription)")
             }
         }
     }
 
-    // MARK: - Timer pour 100%
+    // MARK: - Timers
 
-    /// Démarre un timer qui répète la notification toutes les 60 secondes quand le contexte est plein
-    private func startFullContextTimerIfNeeded() {
-        guard fullContextTimer == nil else { return }
+    private func startTimerIfNeeded(for key: String, session: SessionInfo) {
+        guard fullContextTimers[key] == nil else { return }
 
-        fullContextTimer = Timer.scheduledTimer(withTimeInterval: 60.0, repeats: true) { [weak self] _ in
-            self?.sendNotification(for: .full)
+        fullContextTimers[key] = Timer.scheduledTimer(withTimeInterval: 60.0, repeats: true) { [weak self] _ in
+            self?.sendNotification(for: .full, session: session)
         }
     }
 
-    /// Arrête le timer de répétition
-    private func stopFullContextTimer() {
-        fullContextTimer?.invalidate()
-        fullContextTimer = nil
+    private func stopTimer(for key: String) {
+        fullContextTimers[key]?.invalidate()
+        fullContextTimers.removeValue(forKey: key)
     }
 
-    // MARK: - UNUserNotificationCenterDelegate
+    // MARK: - Delegate
 
-    /// Permet d'afficher les notifications même quand l'app est au premier plan
     func userNotificationCenter(
         _ center: UNUserNotificationCenter,
         willPresent notification: UNNotification,
