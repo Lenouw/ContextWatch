@@ -7,3 +7,5 @@ build/
 DerivedData/
 *.xcuserstate
 xcuserdata/
+*.iconset/
+Exports de app/
