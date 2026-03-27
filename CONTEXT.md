@@ -9,62 +9,82 @@
 - **Target** : macOS 13+
 - **Surveillance fichiers** : FSEventStream (natif macOS, pas de polling)
 - **Notifications** : UserNotifications (UNUserNotificationCenter)
-- **Dépendances externes** : aucune
+- **Auto-update** : Sparkle 2.9.0 (SPM) — vérification + téléchargement auto via GitHub Releases
 - **Projet** : Xcode project (.xcodeproj)
 - **Génération icône** : Python Pillow (script `generate_icon.py`, pas de dépendance runtime)
+- **Distribution** : GitHub Releases (Lenouw/ContextWatch) + appcast.xml signé EdDSA
 
 ## Dernière mise à jour
-2026-03-27 21h — V2 complète : multi-sessions, tokens réels, code couleur, nouveau logo
+2026-03-27 23h45 — Sparkle intégré, indicateurs d'activité, Computer Use, couleurs par catégorie, repo GitHub créé, release v1.1.0
 
 ## Ce qu'on a fait
+- 2026-03-27 23h45 : **Mise à jour automatique Sparkle** — framework Sparkle 2.9.0 intégré via SPM, clé EdDSA partagée avec ZapClipper (Keychain), SUFeedURL et SUPublicEDKey dans Info.plist, menu "Vérifier les mises à jour…" (⌘U), affichage de la version "ContextWatch v1.1.0 (1)" en bas du menu.
+- 2026-03-27 23h30 : **Repo GitHub Lenouw/ContextWatch** créé (public), première release v1.1.0 signée et uploadée, appcast.xml poussé sur main.
+- 2026-03-27 23h : **Badge Computer Use 🖥️** — détection des sessions utilisant `mcp__computer-use__*` via un scan des derniers 100 Ko du .jsonl. Affiché en fin de ligne dans le menu.
+- 2026-03-27 22h30 : **Indicateurs d'activité** — enum `SessionActivity` (working/waiting/idle) basé sur le dernier message du .jsonl + mtime du fichier. Icônes ⚡💬💤 devant chaque session. En-tête du menu avec décompte par état.
+- 2026-03-27 22h : **Couleurs par catégorie de projet** — `colorForProject()` : App→bleu ciel, Site→vert menthe, CRM→orange doux, Screenshot→violet, API/Server→rose, autres→blanc lumineux.
 - 2026-03-27 21h : Design du menu amélioré — noms de projets en blanc gras, pourcentages en couleur (vert/jaune/orange/rouge), tokens et modèle en gris. Items "enabled" avec action noop pour éviter le grisage macOS.
 - 2026-03-27 20h : Ajout du code couleur dans le menu ET la menu bar — vert (0-60%), jaune (61-79%), orange (80-89%), rouge (90-100%). Affichage du modèle (Sonnet/Opus/Haiku) sur chaque ligne.
-- 2026-03-27 19h : **Fix critique du calcul de contexte** — passage de la taille du fichier (faux) aux vrais token counts de l'API Anthropic. Le contexte réel = `input_tokens + cache_creation_input_tokens + cache_read_input_tokens` dans `message.usage` du dernier message `assistant` top-level. Filtrage des messages `progress` (sous-agents) qui ont leurs propres compteurs.
-- 2026-03-27 18h : Refonte multi-sessions — l'app affiche maintenant UNE ligne par projet actif (le .jsonl le plus récent par dossier projet). Limites de contexte auto-détectées selon le modèle (Opus=1M, Sonnet/Haiku=200K). Notifications indépendantes par projet.
-- 2026-03-27 17h : Nouveau logo créé avec Pillow — arc de progression vert→jaune→orange + oeil orange stylisé au centre sur fond bleu nuit. Conversion .icns via iconutil.
-- 2026-03-27 : App V1 complète codée et compilée — 4 fichiers Swift, Info.plist, projet Xcode, build OK
-- 2026-03-27 : Plan d'action validé — 6 phases définies
+- 2026-03-27 19h : **Fix critique du calcul de contexte** — passage de la taille du fichier (faux) aux vrais token counts de l'API Anthropic.
+- 2026-03-27 18h : Refonte multi-sessions — une ligne par projet actif, limites auto par modèle, notifications indépendantes.
+- 2026-03-27 17h : Nouveau logo créé avec Pillow — arc de progression + oeil orange sur fond bleu nuit.
+- 2026-03-27 : App V1 complète codée et compilée — 4 fichiers Swift, build OK
 - 2026-03-27 : Initialisation du projet, création du dépôt Git et du CONTEXT.md
 
 ## Où on en est
-L'app est **fonctionnelle et déployée dans /Applications** :
-- Surveille en temps réel TOUTES les sessions Claude Code actives (modifiées dans les dernières 48h)
-- Affiche le vrai pourcentage de contexte basé sur les token counts API (pas la taille fichier)
-- Menu avec code couleur : noms en blanc gras, pourcentages en couleur (vert→jaune→orange→rouge)
-- Détecte automatiquement le modèle (Opus 1M, Sonnet 200K, Haiku 200K) et ajuste la limite
+L'app est **complète, déployée dans /Applications, et distribuable** :
+- Surveille en temps réel TOUTES les sessions Claude Code actives (fenêtre 48h)
+- Affiche le vrai pourcentage de contexte basé sur les token counts API
+- Indicateurs d'activité par session : ⚡ en cours (Claude travaille), 💬 en attente (ton tour), 💤 idle
+- Badge 🖥️ Computer Use sur les sessions utilisant le contrôle de l'ordinateur
+- Noms de projets colorés par catégorie (App→bleu, Site→vert, CRM→orange, Screenshot→violet)
+- Pourcentages en couleur (vert→jaune→orange→rouge) selon le remplissage
+- Détecte automatiquement le modèle (Opus 1M, Sonnet 200K, Haiku 200K)
 - Notifications indépendantes par projet aux seuils 80%, 90%, 100%
-- La menu bar affiche le pourcentage de la session la plus critique
-- Option+clic sur un item montre les tokens exacts et le nom complet du modèle (calibration)
+- En-tête du menu avec décompte : "8 sessions — ⚡2 💬3"
+- **Mise à jour automatique via Sparkle** : "Vérifier les mises à jour…" dans le menu
+- Version affichée : "ContextWatch v1.1.0 (1)"
+- **Repo GitHub** : https://github.com/Lenouw/ContextWatch — release v1.1.0 signée
 
 ### Fichiers du projet
 ```
 ContextWatch/
   ContextWatch.xcodeproj/
-    project.pbxproj
-    project.xcworkspace/
+    project.pbxproj              — projet Xcode + dépendance Sparkle SPM
   ContextWatch/
     ContextWatchApp.swift         — point d'entrée @main
-    AppDelegate.swift             — NSStatusItem, menu coloré, orchestration
-    SessionMonitor.swift          — FSEventStream, scan multi-projets, lecture tokens API
+    AppDelegate.swift             — NSStatusItem, menu coloré, Sparkle updater, orchestration
+    SessionMonitor.swift          — FSEventStream, scan multi-projets, tokens API, activité, Computer Use
     NotificationManager.swift     — UNUserNotificationCenter, seuils par projet
-    Info.plist                    — LSUIElement=true
+    Info.plist                    — LSUIElement=true, SUFeedURL, SUPublicEDKey, version 1.1.0
     AppIcon.icns                  — icône de l'app
+appcast.xml                       — feed Sparkle des versions (RSS signé EdDSA)
 generate_icon.py                  — script Python Pillow pour générer le logo
-ContextWatch_AppIcon_1024.png     — source PNG du logo (1024x1024)
-Exports de app/ContextWatch.app   — build compilé exporté
+ContextWatch_AppIcon_1024.png     — source PNG du logo
 ```
 
 ## Architecture et décisions
 - **AppKit pur** : pas de SwiftUI, pour compatibilité et contrôle total sur la menu bar
 - **LSUIElement = true** : l'app vit exclusivement dans la menu bar, pas d'icône dans le Dock
-- **FSEventStream** : surveillance native macOS via `FSEventStreamSetDispatchQueue` (API moderne), latence 1s
-- **Tokens réels, pas taille fichier** : on lit les derniers ~100 Ko du .jsonl pour extraire `usage.input_tokens + cache_creation_input_tokens + cache_read_input_tokens` du dernier message `assistant` top-level. C'est le vrai compteur de contexte de l'API Anthropic. On ignore les messages `type: "progress"` qui sont des sous-agents avec leurs propres compteurs.
-- **Multi-sessions** : un scan par dossier projet dans `~/.claude/projects/`, on garde le .jsonl le plus récent par projet. Fenêtre d'activité : 48h (constante `activeWindowHours`).
-- **Limites auto par modèle** : dictionnaire `contextLimits` dans SessionMonitor — "opus"→1M, "sonnet"→200K, "haiku"→200K. Détection via le champ `message.model` du .jsonl.
-- **Non sandboxé** : nécessaire pour accéder à `~/.claude/projects/`
-- **Items de menu "enabled" avec action noop** : `isEnabled = false` force macOS à griser le texte, écrasant les attributedTitle colorés. Solution : action `@objc noop()` bidon pour garder les items enabled tout en étant non-interactifs.
-- **NSAttributedString pour le menu** : chaque partie de la ligne a ses propres attributs (couleur, police, taille). Noms en blanc gras, pourcentages en couleur+gras, tokens en gris 60% taille 11, modèle en gris 50%.
-- **Notifications indépendantes par projet** : `notifiedThresholds: [String: Set<Int>]` indexé par chemin du dossier projet. Reset quand le .jsonl actif change (nouvelle conversation détectée).
+- **FSEventStream** : surveillance native macOS, latence 1s
+- **Tokens réels** : lecture des derniers ~100 Ko du .jsonl, extraction de `usage.input_tokens + cache_creation_input_tokens + cache_read_input_tokens` du dernier message `assistant` top-level. Filtrage des `progress` (sous-agents).
+- **Multi-sessions** : scan par dossier projet dans `~/.claude/projects/`, .jsonl le plus récent par projet. Fenêtre d'activité : 48h.
+- **Limites auto par modèle** : dictionnaire `contextLimits` — "opus"→1M, "sonnet"→200K, "haiku"→200K
+- **Détection d'activité** : basée sur le `type` + `stop_reason` du dernier message + `mtime` du fichier. Working = tool_use/progress/mtime<30s. Waiting = end_turn + mtime<5min. Idle = end_turn + mtime>5min.
+- **Computer Use** : détection par `text.contains("mcp__computer-use__")` dans les derniers 100 Ko du .jsonl
+- **Couleurs par catégorie** : `colorForProject()` dans AppDelegate — préfixes "app"→bleu, "site"→vert, "crm"→orange, "screenshot"→violet, "api/server"→rose
+- **Items de menu avec action noop** : `isEnabled=false` grise le texte → solution `@objc noop()` pour garder les couleurs
+- **Sparkle 2.9.0** : `SPUStandardUpdaterController(startingUpdater: true)` dans AppDelegate. Clé EdDSA partagée avec ZapClipper (même Keychain). Feed via GitHub Raw Content (`appcast.xml` sur main). Distribution via GitHub Releases.
+- **Non sandboxé** : nécessaire pour accéder à `~/.claude/projects/` et pour Sparkle (remplacement du binaire)
+- **Versionnement** : `MARKETING_VERSION` = 1.1.X (incrémenter le patch à chaque modif), `CURRENT_PROJECT_VERSION` = build number
+
+## Workflow de release
+1. Incrémenter `MARKETING_VERSION` (1.1.X+1) et `CURRENT_PROJECT_VERSION` dans `project.pbxproj`
+2. Build Release : `xcodebuild -project ... -configuration Release build CONFIGURATION_BUILD_DIR=/tmp/ContextWatch_build`
+3. Zipper : `ditto -c -k --sequesterRsrc --keepParent /tmp/ContextWatch_build/ContextWatch.app ContextWatch-X.X.X.zip`
+4. Signer : `sign_update ContextWatch-X.X.X.zip` → obtenir `sparkle:edSignature` + `length`
+5. Ajouter l'item dans `appcast.xml` (version, signature, URL)
+6. Commit + push + `gh release create vX.X.X fichier.zip --title "..." --notes "..."`
 
 ## Ce qu'il reste à faire
 - [x] Créer la structure du projet Xcode
@@ -77,6 +97,12 @@ Exports de app/ContextWatch.app   — build compilé exporté
 - [x] Code couleur (vert/jaune/orange/rouge)
 - [x] Affichage du modèle (Sonnet/Opus/Haiku)
 - [x] Design menu amélioré (attributedTitle, couleurs sélectives)
+- [x] Couleurs par catégorie de projet (App, Site, CRM, etc.)
+- [x] Indicateurs d'activité (⚡💬💤)
+- [x] Badge Computer Use 🖥️
+- [x] Mise à jour automatique Sparkle
+- [x] Repo GitHub + première release v1.1.0
+- [x] Affichage de la version dans le menu
 - [ ] Tester les notifications aux seuils 80/90/100% en conditions réelles
 - [ ] Ajouter l'app au Login Items pour lancement automatique au démarrage
-- [ ] Éventuellement : option dans le menu pour modifier les limites de tokens manuellement
+- [ ] Option dans le menu pour modifier les limites de tokens manuellement
