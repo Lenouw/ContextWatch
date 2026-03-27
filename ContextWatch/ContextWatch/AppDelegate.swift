@@ -1,5 +1,6 @@
 import Cocoa
 import UserNotifications
+import Sparkle
 
 /// Délégué principal de l'application.
 /// Gère le status item dans la menu bar, le menu contextuel,
@@ -11,6 +12,9 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     private var statusItem: NSStatusItem!
     private let sessionMonitor = SessionMonitor()
     private let notificationManager = NotificationManager()
+    private let updaterController = SPUStandardUpdaterController(
+        startingUpdater: true, updaterDelegate: nil, userDriverDelegate: nil
+    )
 
     // MARK: - Cycle de vie
 
@@ -52,7 +56,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             return
         }
 
-        let text = "\(worst.icon) \(worst.percentage)%"
+        let text = "\(worst.activity.icon) \(worst.percentage)%"
         button.attributedTitle = NSAttributedString(
             string: text,
             attributes: [.foregroundColor: colorForPercentage(worst.percentage)]
@@ -73,6 +77,24 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
+    /// Couleur du nom de projet selon son préfixe/catégorie
+    private func colorForProject(_ name: String) -> NSColor {
+        let lower = name.lowercased()
+        if lower.hasPrefix("app ") {
+            return NSColor(red: 0.55, green: 0.75, blue: 1.0, alpha: 1.0)   // Bleu ciel
+        } else if lower.hasPrefix("site ") {
+            return NSColor(red: 0.65, green: 0.90, blue: 0.65, alpha: 1.0)  // Vert menthe
+        } else if lower.hasPrefix("crm") || lower.contains("crm") {
+            return NSColor(red: 1.0, green: 0.75, blue: 0.45, alpha: 1.0)   // Orange doux
+        } else if lower.hasPrefix("screenshot") || lower.hasPrefix("screen") {
+            return NSColor(red: 0.85, green: 0.70, blue: 1.0, alpha: 1.0)   // Violet clair
+        } else if lower.hasPrefix("api") || lower.hasPrefix("server") || lower.hasPrefix("backend") {
+            return NSColor(red: 1.0, green: 0.60, blue: 0.65, alpha: 1.0)   // Rose
+        } else {
+            return NSColor(red: 0.90, green: 0.90, blue: 0.90, alpha: 1.0)  // Blanc lumineux (fallback)
+        }
+    }
+
     // MARK: - Menu
 
     private func buildMenu(sessions: [SessionInfo]) {
@@ -83,13 +105,22 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             noSession.isEnabled = false
             menu.addItem(noSession)
         } else {
-            // En-tête
-            let header = NSMenuItem(
-                title: sessions.count == 1
-                    ? "1 session active"
-                    : "\(sessions.count) sessions actives",
-                action: nil, keyEquivalent: ""
-            )
+            // En-tête avec décompte par état
+            let workingCount = sessions.filter { $0.activity == .working }.count
+            let waitingCount = sessions.filter { $0.activity == .waiting }.count
+            let headerText: String
+            if sessions.count == 1 {
+                headerText = "1 session"
+            } else {
+                headerText = "\(sessions.count) sessions"
+            }
+            var statusParts: [String] = []
+            if workingCount > 0 { statusParts.append("⚡\(workingCount)") }
+            if waitingCount > 0 { statusParts.append("💬\(waitingCount)") }
+            let headerFull = statusParts.isEmpty
+                ? headerText
+                : "\(headerText)  —  \(statusParts.joined(separator: "  "))"
+            let header = NSMenuItem(title: headerFull, action: nil, keyEquivalent: "")
             header.isEnabled = false
             menu.addItem(header)
             menu.addItem(.separator())
@@ -128,6 +159,26 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         openItem.target = self
         menu.addItem(openItem)
 
+        // Mise à jour
+        let sparkleItem = NSMenuItem(
+            title: "Vérifier les mises à jour…",
+            action: #selector(checkForUpdates),
+            keyEquivalent: "u"
+        )
+        sparkleItem.target = self
+        menu.addItem(sparkleItem)
+
+        // Version
+        menu.addItem(.separator())
+        let version = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "?"
+        let build = Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? "?"
+        let versionItem = NSMenuItem(
+            title: "ContextWatch v\(version) (\(build))",
+            action: nil, keyEquivalent: ""
+        )
+        versionItem.isEnabled = false
+        menu.addItem(versionItem)
+
         menu.addItem(.separator())
         let quitItem = NSMenuItem(
             title: "Quitter",
@@ -154,14 +205,14 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
         let str = NSMutableAttributedString()
 
-        // Icône en couleur
-        str.append(NSAttributedString(string: "\(session.icon) ", attributes: [
-            .foregroundColor: color, .font: font
+        // Icône d'activité (⚡ working, 💬 waiting, 💤 idle)
+        str.append(NSAttributedString(string: "\(session.activity.icon) ", attributes: [
+            .font: font
         ]))
 
-        // Nom du projet — blanc franc, bien lisible
+        // Nom du projet — couleur selon la catégorie
         str.append(NSAttributedString(string: session.displayName, attributes: [
-            .foregroundColor: NSColor.white, .font: boldFont
+            .foregroundColor: colorForProject(session.displayName), .font: boldFont
         ]))
 
         // Séparateur
@@ -184,6 +235,11 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             .foregroundColor: NSColor(white: 0.50, alpha: 1.0), .font: smallFont
         ]))
 
+        // Badge Computer Use
+        if session.usesComputerUse {
+            str.append(NSAttributedString(string: "  🖥️", attributes: [.font: smallFont]))
+        }
+
         item.attributedTitle = str
         menu.addItem(item)
 
@@ -205,6 +261,10 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             try? FileManager.default.createDirectory(atPath: path, withIntermediateDirectories: true)
         }
         NSWorkspace.shared.open(URL(fileURLWithPath: path))
+    }
+
+    @objc private func checkForUpdates() {
+        updaterController.updater.checkForUpdates()
     }
 
     /// Action bidon pour garder les items de menu "enabled" (et préserver les couleurs)

@@ -1,0 +1,32 @@
+<?xml version="1.0" standalone="yes"?>
+<rss xmlns:sparkle="http://www.andymatuschak.org/xml-namespaces/sparkle" xmlns:dc="http://purl.org/dc/elements/1.1/" version="2.0">
+    <channel>
+        <title>ContextWatch</title>
+        <item>
+            <title>Version 1.1.0</title>
+            <pubDate>Thu, 27 Mar 2026 23:43:00 +0100</pubDate>
+            <sparkle:version>1</sparkle:version>
+            <sparkle:shortVersionString>1.1.0</sparkle:shortVersionString>
+            <description><![CDATA[
+                <h2>ContextWatch 1.1.0</h2>
+                <ul>
+                    <li>Multi-sessions : surveille tous les projets Claude Code actifs</li>
+                    <li>Tokens reels API (plus fiable que la taille fichier)</li>
+                    <li>Code couleur vert/jaune/orange/rouge selon le remplissage</li>
+                    <li>Noms de projets colores par categorie (App, Site, CRM...)</li>
+                    <li>Detection du modele (Opus 1M, Sonnet 200K, Haiku 200K)</li>
+                    <li>Indicateur d'activite : en cours, en attente, idle</li>
+                    <li>Badge Computer Use pour les sessions utilisant le controle ordi</li>
+                    <li>Mise a jour automatique via Sparkle</li>
+                    <li>Nouveau logo avec arc de progression et oeil</li>
+                </ul>
+            ]]></description>
+            <enclosure
+                url="https://github.com/Lenouw/ContextWatch/releases/download/v1.1.0/ContextWatch-1.1.0.zip"
+                sparkle:edSignature="IYOrBSnWsTsYNHJayRG+wqt0Piv55/tiS59dVwDtRrj07p3LVEimLDQk/fajeYrQMB8DKO+cKwiGsIvm66GICQ=="
+                length="1685918"
+                type="application/octet-stream"
+            />
+        </item>
+    </channel>
+</rss>

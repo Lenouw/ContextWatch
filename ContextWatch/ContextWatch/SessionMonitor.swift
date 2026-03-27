@@ -1,6 +1,34 @@
 import Foundation
 import CoreServices
 
+// MARK: - SessionActivity
+
+/// État d'activité d'une session Claude Code
+enum SessionActivity: Equatable {
+    /// Claude est en train de générer une réponse ou d'exécuter des outils
+    case working
+    /// Claude a fini, attend l'input de l'utilisateur
+    case waiting
+    /// Pas d'activité depuis un moment
+    case idle
+
+    var icon: String {
+        switch self {
+        case .working: return "⚡"
+        case .waiting: return "💬"
+        case .idle:    return "💤"
+        }
+    }
+
+    var label: String {
+        switch self {
+        case .working: return "En cours"
+        case .waiting: return "En attente"
+        case .idle:    return "Idle"
+        }
+    }
+}
+
 // MARK: - SessionInfo
 
 /// Représente une session Claude Code active (un projet = un .jsonl actif)
@@ -19,6 +47,10 @@ struct SessionInfo {
     let modelName: String
     /// Date de dernière modification du .jsonl
     let modificationDate: Date
+    /// État d'activité de la session
+    let activity: SessionActivity
+    /// La session utilise Computer Use (contrôle de l'ordinateur)
+    let usesComputerUse: Bool
 
     /// Nom lisible du projet, décodé depuis le nom de dossier Claude Code
     var displayName: String {
@@ -225,8 +257,8 @@ class SessionMonitor {
 
         guard let url = newestURL else { return nil }
 
-        // Extraire les données de contexte du dernier message assistant
-        let (inputTokens, modelName) = extractLastUsage(from: url.path)
+        // Extraire les données de contexte, l'activité et la détection Computer Use
+        let (inputTokens, modelName, activity, computerUse) = extractLastUsage(from: url.path, modDate: newestDate)
 
         // Déterminer la limite de contexte selon le modèle
         let maxTokens = contextLimit(for: modelName)
@@ -246,21 +278,24 @@ class SessionMonitor {
             maxContextTokens: maxTokens,
             percentage: pct,
             modelName: modelName,
-            modificationDate: newestDate
+            modificationDate: newestDate,
+            activity: activity,
+            usesComputerUse: computerUse
         )
     }
 
     // MARK: - Extraction des tokens (lecture minimale du fichier)
 
-    /// Lit les derniers ~100 Ko du fichier .jsonl et cherche le dernier message assistant
-    /// (type "assistant" au top-level, pas "progress" qui sont des sous-agents)
-    /// pour en extraire le total de tokens et le nom du modèle.
+    /// Lit les derniers ~100 Ko du fichier .jsonl pour extraire :
+    /// - Le total de tokens du dernier message assistant (= taille réelle du contexte)
+    /// - Le nom du modèle
+    /// - L'état d'activité de la session (working/waiting/idle)
     ///
     /// Le vrai contexte = input_tokens + cache_creation_input_tokens + cache_read_input_tokens
     /// car l'API Anthropic sépare les tokens non-cachés, nouvellement cachés, et lus depuis le cache.
-    private func extractLastUsage(from path: String) -> (inputTokens: Int, model: String) {
+    private func extractLastUsage(from path: String, modDate: Date) -> (inputTokens: Int, model: String, activity: SessionActivity, computerUse: Bool) {
         guard let handle = FileHandle(forReadingAtPath: path) else {
-            return (0, "unknown")
+            return (0, "unknown", .idle, false)
         }
         defer { handle.closeFile() }
 
@@ -271,42 +306,103 @@ class SessionMonitor {
         let data = handle.readDataToEndOfFile()
 
         guard let text = String(data: data, encoding: .utf8) else {
-            return (0, "unknown")
+            return (0, "unknown", .idle, false)
         }
 
-        // Parcourir les lignes depuis la fin pour trouver le dernier assistant principal
+        // Détection rapide de Computer Use dans le chunk lu
+        let hasComputerUse = text.contains("mcp__computer-use__")
+
         let lines = text.components(separatedBy: "\n").reversed()
 
+        // --- Détection de l'activité ---
+        let secondsSinceModified = Date().timeIntervalSince(modDate)
+        var activity: SessionActivity = .idle
+
+        // Chercher le dernier message significatif pour déterminer l'état
         for line in lines {
-            // Filtre rapide : doit contenir "input_tokens" ET être un message assistant
+            guard !line.isEmpty,
+                  let jsonData = line.data(using: .utf8),
+                  let json = try? JSONSerialization.jsonObject(with: jsonData) as? [String: Any],
+                  let topType = json["type"] as? String
+            else { continue }
+
+            // Ignorer les types internes
+            if topType == "queue-operation" || topType == "system" { continue }
+
+            if topType == "progress" {
+                // Un hook/outil est en cours → working (si récent)
+                if secondsSinceModified < 60 {
+                    activity = .working
+                }
+                break
+            }
+
+            if topType == "assistant" {
+                if let message = json["message"] as? [String: Any],
+                   let stopReason = message["stop_reason"] as? String {
+                    if stopReason == "tool_use" {
+                        // Claude a demandé un outil → working (si récent)
+                        activity = secondsSinceModified < 120 ? .working : .idle
+                    } else {
+                        // end_turn → Claude a fini, attend l'utilisateur
+                        if secondsSinceModified < 300 {
+                            activity = .waiting
+                        } else {
+                            activity = .idle
+                        }
+                    }
+                }
+                break
+            }
+
+            if topType == "user" {
+                if let message = json["message"] as? [String: Any],
+                   let content = message["content"] as? [[String: Any]],
+                   content.contains(where: { ($0["type"] as? String) == "tool_result" }) {
+                    // Résultat d'outil renvoyé → Claude va continuer → working
+                    activity = secondsSinceModified < 120 ? .working : .idle
+                } else {
+                    // L'utilisateur vient d'écrire → Claude va répondre → working
+                    activity = secondsSinceModified < 60 ? .working : .idle
+                }
+                break
+            }
+
+            break
+        }
+
+        // Fallback basé sur le mtime seul
+        if activity == .idle && secondsSinceModified < 30 {
+            activity = .working
+        }
+
+        // --- Extraction des tokens (dernier assistant principal) ---
+        var totalContext = 0
+        var model = "unknown"
+
+        for line in lines {
             guard line.contains("\"input_tokens\"") else { continue }
 
             guard let jsonData = line.data(using: .utf8),
                   let json = try? JSONSerialization.jsonObject(with: jsonData) as? [String: Any]
             else { continue }
 
-            // IMPORTANT : ne prendre que les messages "assistant" au top-level
-            // Ignorer "progress" (sous-agents) et "queue-operation" (internes)
             guard let topType = json["type"] as? String, topType == "assistant" else { continue }
 
-            // Extraire usage depuis message.usage
             guard let message = json["message"] as? [String: Any],
                   let usage = message["usage"] as? [String: Any]
             else { continue }
 
-            let model = message["model"] as? String ?? "unknown"
+            model = message["model"] as? String ?? "unknown"
 
-            // Le vrai nombre de tokens dans le contexte =
-            // input_tokens (non-cachés) + cache_creation (nouveaux dans le cache) + cache_read (lus depuis le cache)
             let inputTokens = usage["input_tokens"] as? Int ?? 0
             let cacheCreation = usage["cache_creation_input_tokens"] as? Int ?? 0
             let cacheRead = usage["cache_read_input_tokens"] as? Int ?? 0
-            let totalContext = inputTokens + cacheCreation + cacheRead
-
-            return (totalContext, model)
+            totalContext = inputTokens + cacheCreation + cacheRead
+            break
         }
 
-        return (0, "unknown")
+        return (totalContext, model, activity, hasComputerUse)
     }
 
     /// Retourne la limite de contexte (en tokens) pour un modèle donné
@@ -324,7 +420,9 @@ class SessionMonitor {
 
     private func updateState(sessions newSessions: [SessionInfo]) {
         let changed = newSessions.count != sessions.count ||
-            zip(newSessions, sessions).contains { $0.path != $1.path || $0.percentage != $1.percentage }
+            zip(newSessions, sessions).contains {
+                $0.path != $1.path || $0.percentage != $1.percentage || $0.activity != $1.activity || $0.usesComputerUse != $1.usesComputerUse
+            }
 
         sessions = newSessions
         lastUpdate = Date()
