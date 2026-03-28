@@ -81,17 +81,17 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     private func colorForProject(_ name: String) -> NSColor {
         let lower = name.lowercased()
         if lower.hasPrefix("app ") {
-            return NSColor(red: 0.55, green: 0.75, blue: 1.0, alpha: 1.0)   // Bleu ciel
+            return NSColor(red: 0.40, green: 0.65, blue: 1.0, alpha: 1.0)   // Bleu vif
         } else if lower.hasPrefix("site ") {
-            return NSColor(red: 0.65, green: 0.90, blue: 0.65, alpha: 1.0)  // Vert menthe
+            return NSColor(red: 0.40, green: 0.85, blue: 0.45, alpha: 1.0)  // Vert franc
         } else if lower.hasPrefix("crm") || lower.contains("crm") {
-            return NSColor(red: 1.0, green: 0.75, blue: 0.45, alpha: 1.0)   // Orange doux
-        } else if lower.hasPrefix("screenshot") || lower.hasPrefix("screen") {
-            return NSColor(red: 0.85, green: 0.70, blue: 1.0, alpha: 1.0)   // Violet clair
+            return NSColor(red: 1.0, green: 0.65, blue: 0.30, alpha: 1.0)   // Orange vif
+        } else if lower.hasPrefix("screenshot") || lower.hasPrefix("screen") || lower.hasPrefix("scan") {
+            return NSColor(red: 0.75, green: 0.55, blue: 1.0, alpha: 1.0)   // Violet
         } else if lower.hasPrefix("api") || lower.hasPrefix("server") || lower.hasPrefix("backend") {
-            return NSColor(red: 1.0, green: 0.60, blue: 0.65, alpha: 1.0)   // Rose
+            return NSColor(red: 1.0, green: 0.50, blue: 0.55, alpha: 1.0)   // Rose
         } else {
-            return NSColor(red: 0.90, green: 0.90, blue: 0.90, alpha: 1.0)  // Blanc lumineux (fallback)
+            return NSColor(red: 0.85, green: 0.75, blue: 0.45, alpha: 1.0)  // Doré (fallback, bien visible)
         }
     }
 
