@@ -15,36 +15,37 @@
 - **Distribution** : GitHub Releases (Lenouw/ContextWatch) + appcast.xml signé EdDSA
 
 ## Dernière mise à jour
-2026-03-27 23h45 — Sparkle intégré, indicateurs d'activité, Computer Use, couleurs par catégorie, repo GitHub créé, release v1.1.0
+2026-03-28 01h — Clic session ouvre Claude Desktop, exploration deep link (limitation Anthropic)
 
 ## Ce qu'on a fait
+- 2026-03-28 01h : **Clic sur session → ouvre Claude Desktop** — cliquer sur une session dans le menu amène Claude Desktop au premier plan. Exploration approfondie du deep linking (`claude://resume`, `claude://claude.ai/chat/`) et de l'Accessibility API (AXUIElement, AXManualAccessibility). Conclusion : **Claude Desktop ne supporte pas la navigation vers un onglet spécifique** depuis l'extérieur — marqué "Not Planned" par Anthropic (issues #18818, #28147, #34097). Le `claude://resume?session=X&cwd=Y` crée un nouvel onglet au lieu de naviguer, et renomme la session. On garde le comportement safe : juste focus Claude.
+- 2026-03-28 00h : **Ajout du champ `cwd` à SessionInfo** — extrait depuis les lignes du .jsonl, permet de matcher avec les fichiers de session Claude Desktop dans `~/Library/Application Support/Claude/claude-code-sessions/`.
 - 2026-03-27 23h45 : **Mise à jour automatique Sparkle** — framework Sparkle 2.9.0 intégré via SPM, clé EdDSA partagée avec ZapClipper (Keychain), SUFeedURL et SUPublicEDKey dans Info.plist, menu "Vérifier les mises à jour…" (⌘U), affichage de la version "ContextWatch v1.1.0 (1)" en bas du menu.
 - 2026-03-27 23h30 : **Repo GitHub Lenouw/ContextWatch** créé (public), première release v1.1.0 signée et uploadée, appcast.xml poussé sur main.
-- 2026-03-27 23h : **Badge Computer Use 🖥️** — détection des sessions utilisant `mcp__computer-use__*` via un scan des derniers 100 Ko du .jsonl. Affiché en fin de ligne dans le menu.
-- 2026-03-27 22h30 : **Indicateurs d'activité** — enum `SessionActivity` (working/waiting/idle) basé sur le dernier message du .jsonl + mtime du fichier. Icônes ⚡💬💤 devant chaque session. En-tête du menu avec décompte par état.
-- 2026-03-27 22h : **Couleurs par catégorie de projet** — `colorForProject()` : App→bleu ciel, Site→vert menthe, CRM→orange doux, Screenshot→violet, API/Server→rose, autres→blanc lumineux.
-- 2026-03-27 21h : Design du menu amélioré — noms de projets en blanc gras, pourcentages en couleur (vert/jaune/orange/rouge), tokens et modèle en gris. Items "enabled" avec action noop pour éviter le grisage macOS.
-- 2026-03-27 20h : Ajout du code couleur dans le menu ET la menu bar — vert (0-60%), jaune (61-79%), orange (80-89%), rouge (90-100%). Affichage du modèle (Sonnet/Opus/Haiku) sur chaque ligne.
-- 2026-03-27 19h : **Fix critique du calcul de contexte** — passage de la taille du fichier (faux) aux vrais token counts de l'API Anthropic.
-- 2026-03-27 18h : Refonte multi-sessions — une ligne par projet actif, limites auto par modèle, notifications indépendantes.
-- 2026-03-27 17h : Nouveau logo créé avec Pillow — arc de progression + oeil orange sur fond bleu nuit.
-- 2026-03-27 : App V1 complète codée et compilée — 4 fichiers Swift, build OK
-- 2026-03-27 : Initialisation du projet, création du dépôt Git et du CONTEXT.md
+- 2026-03-27 23h : **Badge Computer Use 🖥️** — détection des sessions utilisant `mcp__computer-use__*` via un scan des derniers 100 Ko du .jsonl.
+- 2026-03-27 22h30 : **Indicateurs d'activité** — enum `SessionActivity` (working/waiting/idle). Icônes ⚡💬💤.
+- 2026-03-27 22h : **Couleurs par catégorie de projet** — App→bleu, Site→vert, CRM→orange, Screenshot→violet.
+- 2026-03-27 21h : Design du menu amélioré — noms colorés, pourcentages en couleur, tokens et modèle en gris.
+- 2026-03-27 20h : Code couleur vert/jaune/orange/rouge + affichage modèle.
+- 2026-03-27 19h : Fix critique calcul contexte — tokens réels API.
+- 2026-03-27 18h : Refonte multi-sessions.
+- 2026-03-27 17h : Nouveau logo Pillow.
+- 2026-03-27 : App V1 + initialisation projet.
 
 ## Où on en est
 L'app est **complète, déployée dans /Applications, et distribuable** :
 - Surveille en temps réel TOUTES les sessions Claude Code actives (fenêtre 48h)
 - Affiche le vrai pourcentage de contexte basé sur les token counts API
-- Indicateurs d'activité par session : ⚡ en cours (Claude travaille), 💬 en attente (ton tour), 💤 idle
-- Badge 🖥️ Computer Use sur les sessions utilisant le contrôle de l'ordinateur
+- Indicateurs d'activité : ⚡ en cours, 💬 en attente, 💤 idle
+- Badge 🖥️ Computer Use
 - Noms de projets colorés par catégorie (App→bleu, Site→vert, CRM→orange, Screenshot→violet)
-- Pourcentages en couleur (vert→jaune→orange→rouge) selon le remplissage
-- Détecte automatiquement le modèle (Opus 1M, Sonnet 200K, Haiku 200K)
+- Pourcentages en couleur (vert→jaune→orange→rouge)
+- Détecte le modèle (Opus 1M, Sonnet 200K, Haiku 200K)
 - Notifications indépendantes par projet aux seuils 80%, 90%, 100%
-- En-tête du menu avec décompte : "8 sessions — ⚡2 💬3"
-- **Mise à jour automatique via Sparkle** : "Vérifier les mises à jour…" dans le menu
+- **Clic sur session → focus Claude Desktop** (navigation vers l'onglet spécifique pas possible actuellement)
+- Mise à jour automatique via Sparkle
 - Version affichée : "ContextWatch v1.1.0 (1)"
-- **Repo GitHub** : https://github.com/Lenouw/ContextWatch — release v1.1.0 signée
+- **Repo GitHub** : https://github.com/Lenouw/ContextWatch — release v1.1.0
 
 ### Fichiers du projet
 ```
@@ -53,8 +54,8 @@ ContextWatch/
     project.pbxproj              — projet Xcode + dépendance Sparkle SPM
   ContextWatch/
     ContextWatchApp.swift         — point d'entrée @main
-    AppDelegate.swift             — NSStatusItem, menu coloré, Sparkle updater, orchestration
-    SessionMonitor.swift          — FSEventStream, scan multi-projets, tokens API, activité, Computer Use
+    AppDelegate.swift             — NSStatusItem, menu coloré, Sparkle, clic→focus Claude
+    SessionMonitor.swift          — FSEventStream, scan multi-projets, tokens API, activité, Computer Use, cwd
     NotificationManager.swift     — UNUserNotificationCenter, seuils par projet
     Info.plist                    — LSUIElement=true, SUFeedURL, SUPublicEDKey, version 1.1.0
     AppIcon.icns                  — icône de l'app
@@ -70,13 +71,13 @@ ContextWatch_AppIcon_1024.png     — source PNG du logo
 - **Tokens réels** : lecture des derniers ~100 Ko du .jsonl, extraction de `usage.input_tokens + cache_creation_input_tokens + cache_read_input_tokens` du dernier message `assistant` top-level. Filtrage des `progress` (sous-agents).
 - **Multi-sessions** : scan par dossier projet dans `~/.claude/projects/`, .jsonl le plus récent par projet. Fenêtre d'activité : 48h.
 - **Limites auto par modèle** : dictionnaire `contextLimits` — "opus"→1M, "sonnet"→200K, "haiku"→200K
-- **Détection d'activité** : basée sur le `type` + `stop_reason` du dernier message + `mtime` du fichier. Working = tool_use/progress/mtime<30s. Waiting = end_turn + mtime<5min. Idle = end_turn + mtime>5min.
-- **Computer Use** : détection par `text.contains("mcp__computer-use__")` dans les derniers 100 Ko du .jsonl
-- **Couleurs par catégorie** : `colorForProject()` dans AppDelegate — préfixes "app"→bleu, "site"→vert, "crm"→orange, "screenshot"→violet, "api/server"→rose
-- **Items de menu avec action noop** : `isEnabled=false` grise le texte → solution `@objc noop()` pour garder les couleurs
-- **Sparkle 2.9.0** : `SPUStandardUpdaterController(startingUpdater: true)` dans AppDelegate. Clé EdDSA partagée avec ZapClipper (même Keychain). Feed via GitHub Raw Content (`appcast.xml` sur main). Distribution via GitHub Releases.
-- **Non sandboxé** : nécessaire pour accéder à `~/.claude/projects/` et pour Sparkle (remplacement du binaire)
-- **Versionnement** : `MARKETING_VERSION` = 1.1.X (incrémenter le patch à chaque modif), `CURRENT_PROJECT_VERSION` = build number
+- **Détection d'activité** : basée sur le `type` + `stop_reason` du dernier message + `mtime` du fichier.
+- **Computer Use** : détection par `text.contains("mcp__computer-use__")` dans les derniers 100 Ko
+- **Couleurs par catégorie** : `colorForProject()` — préfixes "app"→bleu, "site"→vert, "crm"→orange, "screenshot"→violet
+- **Sparkle 2.9.0** : `SPUStandardUpdaterController(startingUpdater: true)`. Clé EdDSA partagée. Feed via GitHub Raw Content.
+- **Non sandboxé** : nécessaire pour `~/.claude/projects/` et Sparkle
+- **Clic session → focus Claude** : `NSRunningApplication.activate()`. La navigation vers un onglet spécifique n'est PAS possible — Claude Desktop (Electron) n'expose ni raccourcis clavier ni deep link de navigation. `claude://resume` crée un nouvel onglet. Issues GitHub #18818, #28147, #34097 demandent cette feature mais elle est "Not Planned" par Anthropic.
+- **champ `cwd` dans SessionInfo** : extrait du .jsonl, correspond au répertoire de travail réel du projet
 
 ## Workflow de release
 1. Incrémenter `MARKETING_VERSION` (1.1.X+1) et `CURRENT_PROJECT_VERSION` dans `project.pbxproj`
@@ -85,6 +86,9 @@ ContextWatch_AppIcon_1024.png     — source PNG du logo
 4. Signer : `sign_update ContextWatch-X.X.X.zip` → obtenir `sparkle:edSignature` + `length`
 5. Ajouter l'item dans `appcast.xml` (version, signature, URL)
 6. Commit + push + `gh release create vX.X.X fichier.zip --title "..." --notes "..."`
+
+## Problèmes connus
+- **Navigation onglet Claude Desktop impossible** : pas de deep link, pas de raccourci clavier, pas d'API. `claude://resume?session=X&cwd=Y` crée un nouvel onglet et renomme la session existante. `claude://claude.ai/chat/<uuid>` fait bugger l'app. Seule solution viable : focus l'app, l'utilisateur clique manuellement sur l'onglet.
 
 ## Ce qu'il reste à faire
 - [x] Créer la structure du projet Xcode
@@ -103,6 +107,8 @@ ContextWatch_AppIcon_1024.png     — source PNG du logo
 - [x] Mise à jour automatique Sparkle
 - [x] Repo GitHub + première release v1.1.0
 - [x] Affichage de la version dans le menu
+- [x] Clic session → focus Claude Desktop
+- [ ] Navigation vers l'onglet spécifique (bloqué — attendre qu'Anthropic implémente)
 - [ ] Tester les notifications aux seuils 80/90/100% en conditions réelles
 - [ ] Ajouter l'app au Login Items pour lancement automatique au démarrage
 - [ ] Option dans le menu pour modifier les limites de tokens manuellement

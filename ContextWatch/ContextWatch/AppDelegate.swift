@@ -193,10 +193,10 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
     /// Ajoute les items de menu pour une session, avec code couleur sélectif
     private func addSessionItems(to menu: NSMenu, session: SessionInfo) {
-        // On garde l'item "enabled" avec une action bidon pour que macOS
-        // n'écrase pas nos couleurs (isEnabled=false grise tout le texte)
-        let item = NSMenuItem(title: "", action: #selector(noop), keyEquivalent: "")
+        // Action = ouvrir Claude Desktop et tenter de focus la bonne session
+        let item = NSMenuItem(title: "", action: #selector(openSession(_:)), keyEquivalent: "")
         item.target = self
+        item.representedObject = session.cwd
 
         let font = NSFont.menuFont(ofSize: 13)
         let boldFont = NSFont.boldSystemFont(ofSize: 13)
@@ -261,6 +261,18 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             try? FileManager.default.createDirectory(atPath: path, withIntermediateDirectories: true)
         }
         NSWorkspace.shared.open(URL(fileURLWithPath: path))
+    }
+
+    /// Ouvre Claude Desktop au premier plan
+    @objc private func openSession(_ sender: NSMenuItem) {
+        let apps = NSRunningApplication.runningApplications(withBundleIdentifier: "com.anthropic.claudefordesktop")
+        if let claude = apps.first {
+            claude.activate(options: [.activateIgnoringOtherApps])
+        } else {
+            if let url = URL(string: "claude://") {
+                NSWorkspace.shared.open(url)
+            }
+        }
     }
 
     @objc private func checkForUpdates() {

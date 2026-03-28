@@ -51,6 +51,8 @@ struct SessionInfo {
     let activity: SessionActivity
     /// La session utilise Computer Use (contrôle de l'ordinateur)
     let usesComputerUse: Bool
+    /// Répertoire de travail réel du projet (cwd extrait du .jsonl)
+    let cwd: String
 
     /// Nom lisible du projet, décodé depuis le nom de dossier Claude Code
     var displayName: String {
@@ -257,8 +259,8 @@ class SessionMonitor {
 
         guard let url = newestURL else { return nil }
 
-        // Extraire les données de contexte, l'activité et la détection Computer Use
-        let (inputTokens, modelName, activity, computerUse) = extractLastUsage(from: url.path, modDate: newestDate)
+        // Extraire les données de contexte, l'activité, Computer Use et cwd
+        let (inputTokens, modelName, activity, computerUse, extractedCwd) = extractLastUsage(from: url.path, modDate: newestDate)
 
         // Déterminer la limite de contexte selon le modèle
         let maxTokens = contextLimit(for: modelName)
@@ -280,7 +282,8 @@ class SessionMonitor {
             modelName: modelName,
             modificationDate: newestDate,
             activity: activity,
-            usesComputerUse: computerUse
+            usesComputerUse: computerUse,
+            cwd: extractedCwd
         )
     }
 
@@ -293,9 +296,9 @@ class SessionMonitor {
     ///
     /// Le vrai contexte = input_tokens + cache_creation_input_tokens + cache_read_input_tokens
     /// car l'API Anthropic sépare les tokens non-cachés, nouvellement cachés, et lus depuis le cache.
-    private func extractLastUsage(from path: String, modDate: Date) -> (inputTokens: Int, model: String, activity: SessionActivity, computerUse: Bool) {
+    private func extractLastUsage(from path: String, modDate: Date) -> (inputTokens: Int, model: String, activity: SessionActivity, computerUse: Bool, cwd: String) {
         guard let handle = FileHandle(forReadingAtPath: path) else {
-            return (0, "unknown", .idle, false)
+            return (0, "unknown", .idle, false, "")
         }
         defer { handle.closeFile() }
 
@@ -306,7 +309,7 @@ class SessionMonitor {
         let data = handle.readDataToEndOfFile()
 
         guard let text = String(data: data, encoding: .utf8) else {
-            return (0, "unknown", .idle, false)
+            return (0, "unknown", .idle, false, "")
         }
 
         // Détection rapide de Computer Use dans le chunk lu
@@ -402,7 +405,19 @@ class SessionMonitor {
             break
         }
 
-        return (totalContext, model, activity, hasComputerUse)
+        // Extraire le cwd depuis la première ligne qui en contient un
+        var extractedCwd = ""
+        for line in lines {
+            guard line.contains("\"cwd\"") else { continue }
+            guard let jsonData = line.data(using: .utf8),
+                  let json = try? JSONSerialization.jsonObject(with: jsonData) as? [String: Any],
+                  let cwd = json["cwd"] as? String
+            else { continue }
+            extractedCwd = cwd
+            break
+        }
+
+        return (totalContext, model, activity, hasComputerUse, extractedCwd)
     }
 
     /// Retourne la limite de contexte (en tokens) pour un modèle donné
