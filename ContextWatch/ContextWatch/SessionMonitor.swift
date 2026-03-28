@@ -53,8 +53,10 @@ struct SessionInfo {
     let usesComputerUse: Bool
     /// Répertoire de travail réel du projet (cwd extrait du .jsonl)
     let cwd: String
-    /// Nombre d'images dans la conversation (≤20 = safe, >20 = limite 2000px)
+    /// Nombre d'images dans la conversation
     let imageCount: Int
+    /// Au moins une image dépasse 2000px (danger si > 20 images)
+    let hasLargeImage: Bool
 
     /// Nom lisible du projet, décodé depuis le nom de dossier Claude Code
     var displayName: String {
@@ -261,8 +263,8 @@ class SessionMonitor {
 
         guard let url = newestURL else { return nil }
 
-        // Compter les images dans tout le fichier (lecture rapide du fichier entier)
-        let imgCount = countImages(in: url.path)
+        // Compter les images et détecter les grandes (> 2000px)
+        let (imgCount, imgHasLarge) = countImages(in: url.path)
 
         // Extraire les données de contexte, l'activité, Computer Use et cwd
         let (inputTokens, modelName, activity, computerUse, extractedCwd) = extractLastUsage(from: url.path, modDate: newestDate)
@@ -289,47 +291,94 @@ class SessionMonitor {
             activity: activity,
             usesComputerUse: computerUse,
             cwd: extractedCwd,
-            imageCount: imgCount
+            imageCount: imgCount,
+            hasLargeImage: imgHasLarge
         )
     }
 
     // MARK: - Comptage des images
 
-    /// Compte le nombre d'images dans le fichier .jsonl.
-    /// On compte les occurrences de "type":"image" dans les messages (user + tool_result).
-    /// Seules les images dans message.content comptent pour l'API (pas toolUseResult).
-    /// Seuil critique : > 20 images = limite de 2000px par image au lieu de 8000px.
-    private func countImages(in path: String) -> Int {
+    /// Compte les images et détecte si au moins une dépasse 2000px.
+    /// Lit le fichier entier mais ne parse que les lignes contenant des images.
+    /// Retourne (nombre d'images, au moins une > 2000px).
+    private func countImages(in path: String) -> (count: Int, hasLarge: Bool) {
         guard let data = fileManager.contents(atPath: path),
               let text = String(data: data, encoding: .utf8)
-        else { return 0 }
+        else { return (0, false) }
 
-        // Compter les blocs image dans les lignes de type "user" ou "assistant"
-        // Pattern : "type":"image" apparaît dans les content blocks des messages
         var count = 0
+        var hasLarge = false
         let lines = text.components(separatedBy: "\n")
+
         for line in lines {
             guard !line.isEmpty else { continue }
-            // Seuls les messages user et assistant contiennent des images envoyées à l'API
             guard line.contains("\"type\":\"user\"") || line.contains("\"type\":\"assistant\"") else { continue }
-            // Ignorer les messages synthetic
             guard !line.contains("<synthetic>") else { continue }
+            guard line.contains("\"type\":\"image\"") || line.contains("\"type\": \"image\"") else { continue }
 
-            // Compter les occurrences de "type":"image" (= blocs image inline)
-            // et "type": "image" (avec espace)
-            var searchRange = line.startIndex..<line.endIndex
-            while let range = line.range(of: "\"type\":\"image\"", range: searchRange) {
-                count += 1
-                searchRange = range.upperBound..<line.endIndex
-            }
-            // Aussi avec espace après les deux-points
-            searchRange = line.startIndex..<line.endIndex
-            while let range = line.range(of: "\"type\": \"image\"", range: searchRange) {
-                count += 1
-                searchRange = range.upperBound..<line.endIndex
+            // Compter les images dans cette ligne
+            for pattern in ["\"type\":\"image\"", "\"type\": \"image\""] {
+                var searchRange = line.startIndex..<line.endIndex
+                while let range = line.range(of: pattern, range: searchRange) {
+                    count += 1
+
+                    // Détecter les dimensions depuis le base64 (PNG header)
+                    // Chercher le bloc "data":"..." le plus proche après cette image
+                    if !hasLarge {
+                        hasLarge = checkImageDimensions(in: line, near: range.upperBound)
+                    }
+
+                    searchRange = range.upperBound..<line.endIndex
+                }
             }
         }
-        return count
+        return (count, hasLarge)
+    }
+
+    /// Vérifie si une image encodée en base64 dépasse 2000px.
+    /// Lit l'en-tête PNG (largeur/hauteur aux octets 16-23) ou estime via la taille du base64.
+    private func checkImageDimensions(in line: String, near position: String.Index) -> Bool {
+        // Chercher "data":"..." proche de la position
+        let searchEnd = line.index(position, offsetBy: min(500, line.distance(from: position, to: line.endIndex)))
+        let vicinity = String(line[position..<searchEnd])
+
+        guard let dataStart = vicinity.range(of: "\"data\":\"")?.upperBound
+              ?? vicinity.range(of: "\"data\": \"")?.upperBound
+        else { return false }
+
+        let b64Start = vicinity[dataStart...]
+        // Prendre les 48 premiers caractères base64 (= 36 octets décodés, assez pour le header PNG)
+        let b64Prefix = String(b64Start.prefix(48)).replacingOccurrences(of: "\"", with: "")
+
+        guard let headerData = Data(base64Encoded: b64Prefix) else {
+            // Si on ne peut pas décoder le header, estimer par la taille du base64 total
+            // Un bloc base64 de > 500K caractères = probablement une grande image
+            if let dataEnd = b64Start.range(of: "\"")?.lowerBound {
+                let b64Length = b64Start.distance(from: b64Start.startIndex, to: dataEnd)
+                return b64Length > 500_000
+            }
+            return false
+        }
+
+        // PNG : les octets 0-7 sont le magic number (89 50 4E 47 0D 0A 1A 0A)
+        // Octets 16-19 = largeur (big-endian), 20-23 = hauteur (big-endian)
+        if headerData.count >= 24 &&
+           headerData[0] == 0x89 && headerData[1] == 0x50 { // PNG magic
+            let width = Int(headerData[16]) << 24 | Int(headerData[17]) << 16 | Int(headerData[18]) << 8 | Int(headerData[19])
+            let height = Int(headerData[20]) << 24 | Int(headerData[21]) << 16 | Int(headerData[22]) << 8 | Int(headerData[23])
+            return width > 2000 || height > 2000
+        }
+
+        // JPEG : pas facile à parser depuis le header seul, on estime par la taille
+        if headerData.count >= 2 && headerData[0] == 0xFF && headerData[1] == 0xD8 { // JPEG magic
+            if let dataEnd = b64Start.range(of: "\"")?.lowerBound {
+                let b64Length = b64Start.distance(from: b64Start.startIndex, to: dataEnd)
+                // JPEG > 400K base64 chars ≈ > 300KB ≈ probablement > 2000px
+                return b64Length > 400_000
+            }
+        }
+
+        return false
     }
 
     // MARK: - Extraction des tokens (lecture minimale du fichier)

@@ -105,14 +105,15 @@ class NotificationManager: NSObject, UNUserNotificationCenterDelegate {
             stopTimer(for: key)
         }
 
-        // Alerte images : > 15 images = warning, > 20 = danger
-        // On stocke dans le même Set que les seuils de contexte, avec des valeurs distinctes (1015, 1020)
-        if session.imageCount > 20 && !(notifiedThresholds[key]!.contains(1020)) {
-            sendImageAlert(session: session, level: .danger)
-            notifiedThresholds[key]!.insert(1020)
-        } else if session.imageCount > 15 && session.imageCount <= 20 && !(notifiedThresholds[key]!.contains(1015)) {
-            sendImageAlert(session: session, level: .warning)
-            notifiedThresholds[key]!.insert(1015)
+        // Alerte images : seulement si au moins une image > 2000px
+        if session.hasLargeImage {
+            if session.imageCount > 20 && !(notifiedThresholds[key]!.contains(1020)) {
+                sendImageAlert(session: session, level: .danger)
+                notifiedThresholds[key]!.insert(1020)
+            } else if session.imageCount > 15 && session.imageCount <= 20 && !(notifiedThresholds[key]!.contains(1015)) {
+                sendImageAlert(session: session, level: .warning)
+                notifiedThresholds[key]!.insert(1015)
+            }
         }
     }
 

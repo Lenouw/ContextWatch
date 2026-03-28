@@ -245,18 +245,23 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             str.append(NSAttributedString(string: "  🖥️", attributes: [.font: smallFont]))
         }
 
-        // Compteur d'images (warning si > 15, danger si > 20)
+        // Compteur d'images avec détection intelligente
+        // Danger = > 20 images ET au moins une > 2000px
+        // Warning = > 15 images ET au moins une > 2000px (on approche du seuil)
         if session.imageCount > 0 {
             let imgColor: NSColor
             let imgPrefix: String
-            if session.imageCount > 20 {
-                imgColor = NSColor(red: 0.92, green: 0.26, blue: 0.21, alpha: 1.0) // Rouge
-                imgPrefix = "⚠️"
-            } else if session.imageCount > 15 {
-                imgColor = NSColor(red: 0.96, green: 0.55, blue: 0.18, alpha: 1.0) // Orange
+            if session.hasLargeImage && session.imageCount > 20 {
+                // DANGER : > 20 images + grande image = crash imminent
+                imgColor = NSColor(red: 0.92, green: 0.26, blue: 0.21, alpha: 1.0)
+                imgPrefix = "🚨"
+            } else if session.hasLargeImage && session.imageCount > 15 {
+                // WARNING : on approche de 20 avec une grande image
+                imgColor = NSColor(red: 0.96, green: 0.55, blue: 0.18, alpha: 1.0)
                 imgPrefix = "⚠️"
             } else {
-                imgColor = NSColor(white: 0.50, alpha: 1.0) // Gris
+                // Safe : soit pas de grande image, soit peu d'images
+                imgColor = NSColor(white: 0.50, alpha: 1.0)
                 imgPrefix = "📷"
             }
             str.append(NSAttributedString(string: "  \(imgPrefix)\(session.imageCount)", attributes: [
