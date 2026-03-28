@@ -125,8 +125,13 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             menu.addItem(header)
             menu.addItem(.separator())
 
-            // Une ligne par session, triée par % décroissant
-            let sorted = sessions.sorted { $0.percentage > $1.percentage }
+            // Tri : activité d'abord (working > waiting > idle), puis date décroissante
+            let sorted = sessions.sorted { a, b in
+                let priorityA = a.activity == .working ? 0 : (a.activity == .waiting ? 1 : 2)
+                let priorityB = b.activity == .working ? 0 : (b.activity == .waiting ? 1 : 2)
+                if priorityA != priorityB { return priorityA < priorityB }
+                return a.modificationDate > b.modificationDate
+            }
             for session in sorted {
                 addSessionItems(to: menu, session: session)
             }

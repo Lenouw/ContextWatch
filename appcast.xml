@@ -3,6 +3,30 @@
     <channel>
         <title>ContextWatch</title>
         <item>
+            <title>Version 1.2.0</title>
+            <pubDate>Sat, 28 Mar 2026 02:24:00 +0100</pubDate>
+            <sparkle:version>2</sparkle:version>
+            <sparkle:shortVersionString>1.2.0</sparkle:shortVersionString>
+            <description><![CDATA[
+                <h2>ContextWatch 1.2.0</h2>
+                <ul>
+                    <li>Indicateurs d'activite : ⚡ en cours, 💬 en attente, 💤 idle</li>
+                    <li>Badge 🖥️ Computer Use sur les sessions concernees</li>
+                    <li>Noms de projets colores par categorie (App=bleu, Site=vert, CRM=orange, Screenshot=violet)</li>
+                    <li>Tri par activite : sessions actives en haut, idle en bas</li>
+                    <li>Clic sur une session ouvre Claude Desktop au premier plan</li>
+                    <li>Mise a jour automatique Sparkle integree</li>
+                    <li>Version affichee dans le menu</li>
+                </ul>
+            ]]></description>
+            <enclosure
+                url="https://github.com/Lenouw/ContextWatch/releases/download/v1.2.0/ContextWatch-1.2.0.zip"
+                sparkle:edSignature="K48gjCXgSn43RL07nUM59TtbtfQXrVJ5mW+sQDHXsTls0FjNIsw/tFZyxb0YKlBXRt0ZrElpGNHX2m8nquWsAQ=="
+                length="1688125"
+                type="application/octet-stream"
+            />
+        </item>
+        <item>
             <title>Version 1.1.0</title>
             <pubDate>Thu, 27 Mar 2026 23:43:00 +0100</pubDate>
             <sparkle:version>1</sparkle:version>
@@ -13,11 +37,7 @@
                     <li>Multi-sessions : surveille tous les projets Claude Code actifs</li>
                     <li>Tokens reels API (plus fiable que la taille fichier)</li>
                     <li>Code couleur vert/jaune/orange/rouge selon le remplissage</li>
-                    <li>Noms de projets colores par categorie (App, Site, CRM...)</li>
                     <li>Detection du modele (Opus 1M, Sonnet 200K, Haiku 200K)</li>
-                    <li>Indicateur d'activite : en cours, en attente, idle</li>
-                    <li>Badge Computer Use pour les sessions utilisant le controle ordi</li>
-                    <li>Mise a jour automatique via Sparkle</li>
                     <li>Nouveau logo avec arc de progression et oeil</li>
                 </ul>
             ]]></description>
