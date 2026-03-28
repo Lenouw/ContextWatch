@@ -245,6 +245,25 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             str.append(NSAttributedString(string: "  🖥️", attributes: [.font: smallFont]))
         }
 
+        // Compteur d'images (warning si > 15, danger si > 20)
+        if session.imageCount > 0 {
+            let imgColor: NSColor
+            let imgPrefix: String
+            if session.imageCount > 20 {
+                imgColor = NSColor(red: 0.92, green: 0.26, blue: 0.21, alpha: 1.0) // Rouge
+                imgPrefix = "⚠️"
+            } else if session.imageCount > 15 {
+                imgColor = NSColor(red: 0.96, green: 0.55, blue: 0.18, alpha: 1.0) // Orange
+                imgPrefix = "⚠️"
+            } else {
+                imgColor = NSColor(white: 0.50, alpha: 1.0) // Gris
+                imgPrefix = "📷"
+            }
+            str.append(NSAttributedString(string: "  \(imgPrefix)\(session.imageCount)", attributes: [
+                .foregroundColor: imgColor, .font: smallFont
+            ]))
+        }
+
         item.attributedTitle = str
         menu.addItem(item)
 

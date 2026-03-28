@@ -3,6 +3,28 @@
     <channel>
         <title>ContextWatch</title>
         <item>
+            <title>Version 1.3.0</title>
+            <pubDate>Sat, 28 Mar 2026 09:30:00 +0100</pubDate>
+            <sparkle:version>4</sparkle:version>
+            <sparkle:shortVersionString>1.3.0</sparkle:shortVersionString>
+            <description><![CDATA[
+                <h2>ContextWatch 1.3.0</h2>
+                <ul>
+                    <li>Compteur d'images par session (📷12, ⚠️17, ⚠️23)</li>
+                    <li>Notification a 16 images (warning) et 21 images (danger)</li>
+                    <li>Au-dela de 20 images, les images > 2000px font crasher la session</li>
+                    <li>Fix : les messages synthetic (post-crash) ne remettent plus le contexte a 0%</li>
+                    <li>Couleurs des noms de projets plus vives et lisibles</li>
+                </ul>
+            ]]></description>
+            <enclosure
+                url="https://github.com/Lenouw/ContextWatch/releases/download/v1.3.0/ContextWatch-1.3.0.zip"
+                sparkle:edSignature="ZEF8p7xHJ6vFX/PoqHgFSL38OMIyEWg+aZqbJ+5lTf5ILAhFNVGvEnZH0WOsoA3XSjzBDwSpvhPy3Cjd5x4NBw=="
+                length="1690784"
+                type="application/octet-stream"
+            />
+        </item>
+        <item>
             <title>Version 1.2.1</title>
             <pubDate>Sat, 28 Mar 2026 07:45:00 +0100</pubDate>
             <sparkle:version>3</sparkle:version>

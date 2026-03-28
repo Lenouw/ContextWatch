@@ -104,6 +104,16 @@ class NotificationManager: NSObject, UNUserNotificationCenterDelegate {
         } else {
             stopTimer(for: key)
         }
+
+        // Alerte images : > 15 images = warning, > 20 = danger
+        // On stocke dans le même Set que les seuils de contexte, avec des valeurs distinctes (1015, 1020)
+        if session.imageCount > 20 && !(notifiedThresholds[key]!.contains(1020)) {
+            sendImageAlert(session: session, level: .danger)
+            notifiedThresholds[key]!.insert(1020)
+        } else if session.imageCount > 15 && session.imageCount <= 20 && !(notifiedThresholds[key]!.contains(1015)) {
+            sendImageAlert(session: session, level: .warning)
+            notifiedThresholds[key]!.insert(1015)
+        }
     }
 
     // MARK: - Envoi des notifications
@@ -137,6 +147,43 @@ class NotificationManager: NSObject, UNUserNotificationCenterDelegate {
         center.add(request) { error in
             if let error = error {
                 print("[ContextWatch] Erreur notification : \(error.localizedDescription)")
+            }
+        }
+    }
+
+    // MARK: - Alertes images
+
+    private enum ImageAlertLevel {
+        case warning  // > 15 images
+        case danger   // > 20 images
+    }
+
+    private func sendImageAlert(session: SessionInfo, level: ImageAlertLevel) {
+        let content = UNMutableNotificationContent()
+        content.title = "ContextWatch — \(session.displayName)"
+
+        switch level {
+        case .warning:
+            content.body = "⚠️ \(session.imageCount) images — au-delà de 20, les images > 2000px feront crasher la session !"
+            content.sound = .default
+        case .danger:
+            content.body = "🚨 \(session.imageCount) images — limite dépassée ! Toute image > 2000px bloquera la session. Fais un save !"
+            content.sound = .default
+        }
+
+        if #available(macOS 12.0, *) {
+            content.interruptionLevel = .timeSensitive
+        }
+
+        let request = UNNotificationRequest(
+            identifier: "contextwatch-img-\(UUID().uuidString)",
+            content: content,
+            trigger: nil
+        )
+
+        center.add(request) { error in
+            if let error = error {
+                print("[ContextWatch] Erreur notification image : \(error.localizedDescription)")
             }
         }
     }

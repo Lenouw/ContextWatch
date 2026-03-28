@@ -53,6 +53,8 @@ struct SessionInfo {
     let usesComputerUse: Bool
     /// Répertoire de travail réel du projet (cwd extrait du .jsonl)
     let cwd: String
+    /// Nombre d'images dans la conversation (≤20 = safe, >20 = limite 2000px)
+    let imageCount: Int
 
     /// Nom lisible du projet, décodé depuis le nom de dossier Claude Code
     var displayName: String {
@@ -259,6 +261,9 @@ class SessionMonitor {
 
         guard let url = newestURL else { return nil }
 
+        // Compter les images dans tout le fichier (lecture rapide du fichier entier)
+        let imgCount = countImages(in: url.path)
+
         // Extraire les données de contexte, l'activité, Computer Use et cwd
         let (inputTokens, modelName, activity, computerUse, extractedCwd) = extractLastUsage(from: url.path, modDate: newestDate)
 
@@ -283,8 +288,48 @@ class SessionMonitor {
             modificationDate: newestDate,
             activity: activity,
             usesComputerUse: computerUse,
-            cwd: extractedCwd
+            cwd: extractedCwd,
+            imageCount: imgCount
         )
+    }
+
+    // MARK: - Comptage des images
+
+    /// Compte le nombre d'images dans le fichier .jsonl.
+    /// On compte les occurrences de "type":"image" dans les messages (user + tool_result).
+    /// Seules les images dans message.content comptent pour l'API (pas toolUseResult).
+    /// Seuil critique : > 20 images = limite de 2000px par image au lieu de 8000px.
+    private func countImages(in path: String) -> Int {
+        guard let data = fileManager.contents(atPath: path),
+              let text = String(data: data, encoding: .utf8)
+        else { return 0 }
+
+        // Compter les blocs image dans les lignes de type "user" ou "assistant"
+        // Pattern : "type":"image" apparaît dans les content blocks des messages
+        var count = 0
+        let lines = text.components(separatedBy: "\n")
+        for line in lines {
+            guard !line.isEmpty else { continue }
+            // Seuls les messages user et assistant contiennent des images envoyées à l'API
+            guard line.contains("\"type\":\"user\"") || line.contains("\"type\":\"assistant\"") else { continue }
+            // Ignorer les messages synthetic
+            guard !line.contains("<synthetic>") else { continue }
+
+            // Compter les occurrences de "type":"image" (= blocs image inline)
+            // et "type": "image" (avec espace)
+            var searchRange = line.startIndex..<line.endIndex
+            while let range = line.range(of: "\"type\":\"image\"", range: searchRange) {
+                count += 1
+                searchRange = range.upperBound..<line.endIndex
+            }
+            // Aussi avec espace après les deux-points
+            searchRange = line.startIndex..<line.endIndex
+            while let range = line.range(of: "\"type\": \"image\"", range: searchRange) {
+                count += 1
+                searchRange = range.upperBound..<line.endIndex
+            }
+        }
+        return count
     }
 
     // MARK: - Extraction des tokens (lecture minimale du fichier)
@@ -341,17 +386,20 @@ class SessionMonitor {
             }
 
             if topType == "assistant" {
-                if let message = json["message"] as? [String: Any],
-                   let stopReason = message["stop_reason"] as? String {
-                    if stopReason == "tool_use" {
-                        // Claude a demandé un outil → working (si récent)
-                        activity = secondsSinceModified < 120 ? .working : .idle
-                    } else {
-                        // end_turn → Claude a fini, attend l'utilisateur
-                        if secondsSinceModified < 300 {
-                            activity = .waiting
+                if let message = json["message"] as? [String: Any] {
+                    let msgModel = message["model"] as? String ?? ""
+                    // Ignorer les messages synthetic (crash/système)
+                    if msgModel.contains("synthetic") { continue }
+
+                    if let stopReason = message["stop_reason"] as? String {
+                        if stopReason == "tool_use" {
+                            activity = secondsSinceModified < 120 ? .working : .idle
                         } else {
-                            activity = .idle
+                            if secondsSinceModified < 300 {
+                                activity = .waiting
+                            } else {
+                                activity = .idle
+                            }
                         }
                     }
                 }
@@ -379,24 +427,32 @@ class SessionMonitor {
             activity = .working
         }
 
-        // --- Extraction des tokens (dernier assistant principal) ---
+        // --- Extraction des tokens (dernier assistant principal, PAS synthetic) ---
         var totalContext = 0
         var model = "unknown"
 
         for line in lines {
             guard line.contains("\"input_tokens\"") else { continue }
+            // Filtre rapide : ignorer les messages synthetic (crash/système)
+            guard !line.contains("<synthetic>") else { continue }
 
             guard let jsonData = line.data(using: .utf8),
                   let json = try? JSONSerialization.jsonObject(with: jsonData) as? [String: Any]
             else { continue }
 
             guard let topType = json["type"] as? String, topType == "assistant" else { continue }
+            // Ignorer aussi les messages "progress" (sous-agents)
+            if json["isSidechain"] as? Bool == true { continue }
 
             guard let message = json["message"] as? [String: Any],
                   let usage = message["usage"] as? [String: Any]
             else { continue }
 
-            model = message["model"] as? String ?? "unknown"
+            let msgModel = message["model"] as? String ?? "unknown"
+            // Double vérification : ignorer les modèles synthetic
+            guard !msgModel.contains("synthetic") else { continue }
+
+            model = msgModel
 
             let inputTokens = usage["input_tokens"] as? Int ?? 0
             let cacheCreation = usage["cache_creation_input_tokens"] as? Int ?? 0
@@ -436,7 +492,7 @@ class SessionMonitor {
     private func updateState(sessions newSessions: [SessionInfo]) {
         let changed = newSessions.count != sessions.count ||
             zip(newSessions, sessions).contains {
-                $0.path != $1.path || $0.percentage != $1.percentage || $0.activity != $1.activity || $0.usesComputerUse != $1.usesComputerUse
+                $0.path != $1.path || $0.percentage != $1.percentage || $0.activity != $1.activity || $0.usesComputerUse != $1.usesComputerUse || $0.imageCount != $1.imageCount
             }
 
         sessions = newSessions
