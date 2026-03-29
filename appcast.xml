@@ -3,6 +3,25 @@
     <channel>
         <title>ContextWatch</title>
         <item>
+            <title>Version 1.3.2</title>
+            <pubDate>Sun, 29 Mar 2026 20:47:00 +0200</pubDate>
+            <sparkle:version>6</sparkle:version>
+            <sparkle:shortVersionString>1.3.2</sparkle:shortVersionString>
+            <description><![CDATA[
+                <h2>ContextWatch 1.3.2</h2>
+                <ul>
+                    <li>Fix couleurs illisibles : jaune → ambre foncé (61-79%)</li>
+                    <li>Fix fallback noms de projets : doré → gris argenté (lisible sur fond sombre)</li>
+                </ul>
+            ]]></description>
+            <enclosure
+                url="https://github.com/Lenouw/ContextWatch/releases/download/v1.3.2/ContextWatch-1.3.2.zip"
+                sparkle:edSignature="UhJbCLwcvTBj+gOvL8rerhGtqNodAoPK4Mj4Cxb3O9T1HK8ixyvZYLUdeKRJxie8It7AkMm1CHobnOF199s9Ag=="
+                length="1692453"
+                type="application/octet-stream"
+            />
+        </item>
+        <item>
             <title>Version 1.3.1</title>
             <pubDate>Sat, 28 Mar 2026 10:00:00 +0100</pubDate>
             <sparkle:version>5</sparkle:version>

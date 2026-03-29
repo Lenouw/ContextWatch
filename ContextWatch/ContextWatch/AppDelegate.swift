@@ -69,7 +69,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         case 0...60:
             return NSColor(red: 0.30, green: 0.78, blue: 0.47, alpha: 1.0) // Vert
         case 61...79:
-            return NSColor(red: 0.95, green: 0.77, blue: 0.06, alpha: 1.0) // Jaune
+            return NSColor(red: 0.90, green: 0.60, blue: 0.05, alpha: 1.0) // Ambre foncé
         case 80...89:
             return NSColor(red: 0.96, green: 0.55, blue: 0.18, alpha: 1.0) // Orange
         default:
@@ -91,7 +91,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         } else if lower.hasPrefix("api") || lower.hasPrefix("server") || lower.hasPrefix("backend") {
             return NSColor(red: 1.0, green: 0.50, blue: 0.55, alpha: 1.0)   // Rose
         } else {
-            return NSColor(red: 0.85, green: 0.75, blue: 0.45, alpha: 1.0)  // Doré (fallback, bien visible)
+            return NSColor(red: 0.78, green: 0.78, blue: 0.82, alpha: 1.0)  // Gris argenté (fallback neutre)
         }
     }
 
