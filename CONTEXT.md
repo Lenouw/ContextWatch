@@ -15,9 +15,11 @@
 - **Distribution** : GitHub Releases (Lenouw/ContextWatch) + appcast.xml signé EdDSA
 
 ## Dernière mise à jour
-2026-03-28 10h — v1.3.1 : compteur d'images intelligent, fix synthetic, détection dimensions
+2026-03-29 21h — v1.3.2 : audit sécurité, fix couleurs
 
 ## Ce qu'on a fait
+- 2026-03-29 21h : **Audit sécurité + fix couleurs v1.3.2** — 8 vulnérabilités corrigées : cap mémoire 50MB countImages (HIGH), sanitisation displayName dans notifications (MEDIUM), suppression TOCTOU openProjectsFolder (MEDIUM), logging JSON errors via os_log (MEDIUM), suppression force-unwrap NotificationManager (LOW), FSEventStream passRetained + retain/release callbacks (LOW), cap imageCount display 9999 (LOW), print → os_log (INFO).
+- 2026-03-29 20h47 : **Fix couleurs illisibles v1.3.2** — jaune 61-79% → ambre foncé, fallback projets doré → gris argenté.
 - 2026-03-28 10h : **Détection intelligente dimensions images** — lecture des headers PNG (octets 16-23) pour dimensions exactes, estimation JPEG via taille base64. Alerte uniquement si > 20 images ET au moins une > 2000px. Pas de fausse alerte si toutes les images sont petites. Release v1.3.1.
 - 2026-03-28 09h30 : **Compteur d'images par session** — scan du .jsonl entier pour compter les blocs `"type":"image"`. Affichage 📷N / ⚠️N / 🚨N dans le menu. Notifications à 16 et 21 images (une seule fois par seuil). Release v1.3.0.
 - 2026-03-28 09h : **Fix messages `<synthetic>`** — les messages post-crash (model: `<synthetic>`, 0 tokens) sont maintenant ignorés lors de l'extraction des tokens. Plus de retombée à 0% après un crash de session.

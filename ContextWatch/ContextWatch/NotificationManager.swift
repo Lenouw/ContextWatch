@@ -1,5 +1,6 @@
 import Foundation
 import UserNotifications
+import os
 
 /// Gère les notifications système pour les seuils de remplissage du contexte.
 /// Supporte plusieurs sessions simultanées — chaque projet a son propre état de notification.
@@ -16,6 +17,7 @@ class NotificationManager: NSObject, UNUserNotificationCenterDelegate {
     // MARK: - Propriétés
 
     private let center = UNUserNotificationCenter.current()
+    private let logger = Logger(subsystem: "com.contextwatch.app", category: "NotificationManager")
 
     /// Seuils déjà notifiés, indexés par chemin du dossier projet
     private var notifiedThresholds: [String: Set<Int>] = [:]
@@ -37,9 +39,9 @@ class NotificationManager: NSObject, UNUserNotificationCenterDelegate {
     // MARK: - Permission
 
     func requestPermission() {
-        center.requestAuthorization(options: [.alert, .sound, .badge]) { granted, error in
+        center.requestAuthorization(options: [.alert, .sound, .badge]) { [weak self] granted, error in
             if let error = error {
-                print("[ContextWatch] Erreur permission notifications : \(error.localizedDescription)")
+                self?.logger.error("Erreur permission notifications : \(error.localizedDescription)")
             }
         }
     }
@@ -77,24 +79,19 @@ class NotificationManager: NSObject, UNUserNotificationCenterDelegate {
         }
         lastKnownJSONLPath[key] = session.path
 
-        // Initialiser le Set si nécessaire
-        if notifiedThresholds[key] == nil {
-            notifiedThresholds[key] = []
-        }
-
         // Vérifier chaque seuil
         for threshold in Threshold.allCases {
-            let alreadyNotified = notifiedThresholds[key]!.contains(threshold.rawValue)
+            let alreadyNotified = notifiedThresholds[key, default: []].contains(threshold.rawValue)
 
             if session.percentage >= threshold.rawValue && !alreadyNotified {
                 sendNotification(for: threshold, session: session)
-                notifiedThresholds[key]!.insert(threshold.rawValue)
+                notifiedThresholds[key, default: []].insert(threshold.rawValue)
             }
 
             // Si le pourcentage redescend sous un seuil, on le retire
             // (permet de re-notifier si ça remonte — ex: nouvelle session dans le même projet)
             if session.percentage < threshold.rawValue {
-                notifiedThresholds[key]!.remove(threshold.rawValue)
+                notifiedThresholds[key, default: []].remove(threshold.rawValue)
             }
         }
 
@@ -107,21 +104,35 @@ class NotificationManager: NSObject, UNUserNotificationCenterDelegate {
 
         // Alerte images : seulement si au moins une image > 2000px
         if session.hasLargeImage {
-            if session.imageCount > 20 && !(notifiedThresholds[key]!.contains(1020)) {
+            if session.imageCount > 20 && !notifiedThresholds[key, default: []].contains(1020) {
                 sendImageAlert(session: session, level: .danger)
-                notifiedThresholds[key]!.insert(1020)
-            } else if session.imageCount > 15 && session.imageCount <= 20 && !(notifiedThresholds[key]!.contains(1015)) {
+                notifiedThresholds[key, default: []].insert(1020)
+            } else if session.imageCount > 15 && session.imageCount <= 20
+                        && !notifiedThresholds[key, default: []].contains(1015) {
                 sendImageAlert(session: session, level: .warning)
-                notifiedThresholds[key]!.insert(1015)
+                notifiedThresholds[key, default: []].insert(1015)
             }
         }
+    }
+
+    // MARK: - Helpers
+
+    /// Tronque et nettoie un nom de projet avant insertion dans une notification.
+    /// Empêche le spoofing via noms de dossiers malicieux.
+    private func sanitizedDisplayName(_ name: String) -> String {
+        let truncated = name.count > 40 ? String(name.prefix(40)) + "…" : name
+        let allowed = CharacterSet.alphanumerics.union(.init(charactersIn: " -_.,!?()àâäéèêëîïôùûü"))
+        return truncated.unicodeScalars
+            .filter { allowed.contains($0) }
+            .map { String($0) }
+            .joined()
     }
 
     // MARK: - Envoi des notifications
 
     private func sendNotification(for threshold: Threshold, session: SessionInfo) {
         let content = UNMutableNotificationContent()
-        content.title = "ContextWatch — \(session.displayName)"
+        content.title = "ContextWatch — \(sanitizedDisplayName(session.displayName))"
 
         switch threshold {
         case .warning:
@@ -145,9 +156,9 @@ class NotificationManager: NSObject, UNUserNotificationCenterDelegate {
             trigger: nil
         )
 
-        center.add(request) { error in
+        center.add(request) { [weak self] error in
             if let error = error {
-                print("[ContextWatch] Erreur notification : \(error.localizedDescription)")
+                self?.logger.error("Erreur notification : \(error.localizedDescription)")
             }
         }
     }
@@ -161,14 +172,15 @@ class NotificationManager: NSObject, UNUserNotificationCenterDelegate {
 
     private func sendImageAlert(session: SessionInfo, level: ImageAlertLevel) {
         let content = UNMutableNotificationContent()
-        content.title = "ContextWatch — \(session.displayName)"
+        content.title = "ContextWatch — \(sanitizedDisplayName(session.displayName))"
+        let displayCount = min(session.imageCount, 9999) // cap défensif
 
         switch level {
         case .warning:
-            content.body = "⚠️ \(session.imageCount) images — au-delà de 20, les images > 2000px feront crasher la session !"
+            content.body = "⚠️ \(displayCount) images — au-delà de 20, les images > 2000px feront crasher la session !"
             content.sound = .default
         case .danger:
-            content.body = "🚨 \(session.imageCount) images — limite dépassée ! Toute image > 2000px bloquera la session. Fais un save !"
+            content.body = "🚨 \(displayCount) images — limite dépassée ! Toute image > 2000px bloquera la session. Fais un save !"
             content.sound = .default
         }
 

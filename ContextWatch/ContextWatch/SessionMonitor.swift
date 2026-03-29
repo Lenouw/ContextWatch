@@ -1,5 +1,6 @@
 import Foundation
 import CoreServices
+import os
 
 // MARK: - SessionActivity
 
@@ -154,6 +155,7 @@ class SessionMonitor {
     private var eventStream: FSEventStreamRef?
     private let watchedPath: String
     private let fileManager = FileManager.default
+    private let logger = Logger(subsystem: "com.contextwatch.app", category: "SessionMonitor")
 
     init() {
         let home = fileManager.homeDirectoryForCurrentUser.path
@@ -179,10 +181,21 @@ class SessionMonitor {
     // MARK: - FSEventStream
 
     private func setupEventStream() {
+        // passRetained + retain/release callbacks : le stream détient une référence forte,
+        // éliminant tout risque de dangling pointer si l'objet était désalloué.
         var context = FSEventStreamContext(
             version: 0,
-            info: Unmanaged.passUnretained(self).toOpaque(),
-            retain: nil, release: nil, copyDescription: nil
+            info: Unmanaged.passRetained(self).toOpaque(),
+            retain: { info -> UnsafeRawPointer? in
+                guard let info = info else { return nil }
+                _ = Unmanaged<SessionMonitor>.fromOpaque(info).retain()
+                return info
+            },
+            release: { info in
+                guard let info = info else { return }
+                Unmanaged<SessionMonitor>.fromOpaque(info).release()
+            },
+            copyDescription: nil
         )
 
         let callback: FSEventStreamCallback = { (_, clientInfo, _, _, _, _) in
@@ -299,12 +312,27 @@ class SessionMonitor {
     // MARK: - Comptage des images
 
     /// Compte les images et détecte si au moins une dépasse 2000px.
-    /// Lit le fichier entier mais ne parse que les lignes contenant des images.
+    /// Limité à 50 MB pour éviter l'épuisement mémoire sur les très gros fichiers.
     /// Retourne (nombre d'images, au moins une > 2000px).
     private func countImages(in path: String) -> (count: Int, hasLarge: Bool) {
-        guard let data = fileManager.contents(atPath: path),
-              let text = String(data: data, encoding: .utf8)
+        let maxScanBytes = 50 * 1024 * 1024 // 50 MB cap
+
+        guard let attrs = try? fileManager.attributesOfItem(atPath: path),
+              let fileSize = attrs[.size] as? Int,
+              fileSize > 0
         else { return (0, false) }
+
+        guard let handle = FileHandle(forReadingAtPath: path) else { return (0, false) }
+        defer { handle.closeFile() }
+
+        // Pour les très gros fichiers, lire seulement la fin (messages récents)
+        let bytesToRead = min(fileSize, maxScanBytes)
+        if fileSize > maxScanBytes {
+            handle.seek(toFileOffset: UInt64(fileSize - maxScanBytes))
+        }
+        let data = handle.readData(ofLength: bytesToRead)
+
+        guard let text = String(data: data, encoding: .utf8) else { return (0, false) }
 
         var count = 0
         var hasLarge = false
@@ -414,13 +442,16 @@ class SessionMonitor {
         // --- Détection de l'activité ---
         let secondsSinceModified = Date().timeIntervalSince(modDate)
         var activity: SessionActivity = .idle
+        var parseErrorCount = 0
 
         // Chercher le dernier message significatif pour déterminer l'état
         for line in lines {
-            guard !line.isEmpty,
-                  let jsonData = line.data(using: .utf8),
-                  let json = try? JSONSerialization.jsonObject(with: jsonData) as? [String: Any],
-                  let topType = json["type"] as? String
+            guard !line.isEmpty, let jsonData = line.data(using: .utf8) else { continue }
+            guard let json = (try? JSONSerialization.jsonObject(with: jsonData)) as? [String: Any] else {
+                parseErrorCount += 1
+                continue
+            }
+            guard let topType = json["type"] as? String
             else { continue }
 
             // Ignorer les types internes
@@ -476,6 +507,10 @@ class SessionMonitor {
             activity = .working
         }
 
+        if parseErrorCount > 0 {
+            logger.debug("JSONL parse : \(parseErrorCount) lignes invalides ignorées dans \(path)")
+        }
+
         // --- Extraction des tokens (dernier assistant principal, PAS synthetic) ---
         var totalContext = 0
         var model = "unknown"
@@ -486,7 +521,7 @@ class SessionMonitor {
             guard !line.contains("<synthetic>") else { continue }
 
             guard let jsonData = line.data(using: .utf8),
-                  let json = try? JSONSerialization.jsonObject(with: jsonData) as? [String: Any]
+                  let json = (try? JSONSerialization.jsonObject(with: jsonData)) as? [String: Any]
             else { continue }
 
             guard let topType = json["type"] as? String, topType == "assistant" else { continue }

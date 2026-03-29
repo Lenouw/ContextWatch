@@ -286,9 +286,8 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     @objc private func openProjectsFolder() {
         let home = FileManager.default.homeDirectoryForCurrentUser.path
         let path = "\(home)/.claude/projects"
-        if !FileManager.default.fileExists(atPath: path) {
-            try? FileManager.default.createDirectory(atPath: path, withIntermediateDirectories: true)
-        }
+        // createDirectory est idempotent (withIntermediateDirectories: true) — pas besoin de vérifier d'abord
+        try? FileManager.default.createDirectory(atPath: path, withIntermediateDirectories: true)
         NSWorkspace.shared.open(URL(fileURLWithPath: path))
     }
 
