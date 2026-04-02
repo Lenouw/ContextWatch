@@ -157,6 +157,11 @@ class SessionMonitor {
     private let fileManager = FileManager.default
     private let logger = Logger(subsystem: "com.contextwatch.app", category: "SessionMonitor")
 
+    /// Queue dédiée au scan — toutes les I/O disque se font ici, jamais sur le main thread
+    private let scanQueue = DispatchQueue(label: "com.contextwatch.scan", qos: .utility)
+    /// Work item pour le debounce — annule le scan précédent si un nouvel événement arrive
+    private var debounceWork: DispatchWorkItem?
+
     init() {
         let home = fileManager.homeDirectoryForCurrentUser.path
         watchedPath = "\(home)/.claude/projects"
@@ -165,11 +170,14 @@ class SessionMonitor {
     // MARK: - Surveillance
 
     func startMonitoring() {
-        scanAllSessions()
+        // Scan initial en background
+        scanQueue.async { [weak self] in self?.scanAllSessions() }
         setupEventStream()
     }
 
     func stopMonitoring() {
+        debounceWork?.cancel()
+        debounceWork = nil
         if let stream = eventStream {
             FSEventStreamStop(stream)
             FSEventStreamInvalidate(stream)
@@ -200,21 +208,36 @@ class SessionMonitor {
 
         let callback: FSEventStreamCallback = { (_, clientInfo, _, _, _, _) in
             guard let info = clientInfo else { return }
-            Unmanaged<SessionMonitor>.fromOpaque(info).takeUnretainedValue().scanAllSessions()
+            Unmanaged<SessionMonitor>.fromOpaque(info).takeUnretainedValue().scheduleDebounce()
         }
 
         let pathsToWatch = [watchedPath] as CFArray
         eventStream = FSEventStreamCreate(
             nil, callback, &context, pathsToWatch,
             FSEventStreamEventId(kFSEventStreamEventIdSinceNow),
-            1.0,
+            1.0,  // latence kernel : 1s (coalescing des événements bruts)
             UInt32(kFSEventStreamCreateFlagUseCFTypes)
         )
 
         if let stream = eventStream {
-            FSEventStreamSetDispatchQueue(stream, DispatchQueue.main)
+            // Dispatch sur scanQueue — jamais sur le main thread
+            FSEventStreamSetDispatchQueue(stream, scanQueue)
             FSEventStreamStart(stream)
         }
+    }
+
+    // MARK: - Debounce
+
+    /// Annule le scan précédent et replanifie dans 2s.
+    /// Évite de scanner des dizaines de fois/sec quand Claude génère (I/O intense).
+    /// Appelé depuis scanQueue (FSEvent callback).
+    private func scheduleDebounce() {
+        debounceWork?.cancel()
+        let work = DispatchWorkItem { [weak self] in
+            self?.scanAllSessions()
+        }
+        debounceWork = work
+        scanQueue.asyncAfter(deadline: .now() + 2.0, execute: work)
     }
 
     // MARK: - Scan multi-sessions
@@ -574,17 +597,18 @@ class SessionMonitor {
     // MARK: - État
 
     private func updateState(sessions newSessions: [SessionInfo]) {
-        let changed = newSessions.count != sessions.count ||
-            zip(newSessions, sessions).contains {
-                $0.path != $1.path || $0.percentage != $1.percentage || $0.activity != $1.activity || $0.usesComputerUse != $1.usesComputerUse || $0.imageCount != $1.imageCount
-            }
-
-        sessions = newSessions
-        lastUpdate = Date()
-
-        if changed {
-            DispatchQueue.main.async { [weak self] in
-                guard let self = self else { return }
+        // Toujours dispatcher sur main : sessions et lastUpdate sont lus depuis le main thread
+        DispatchQueue.main.async { [weak self] in
+            guard let self = self else { return }
+            let changed = newSessions.count != self.sessions.count ||
+                zip(newSessions, self.sessions).contains {
+                    $0.path != $1.path || $0.percentage != $1.percentage ||
+                    $0.activity != $1.activity || $0.usesComputerUse != $1.usesComputerUse ||
+                    $0.imageCount != $1.imageCount
+                }
+            self.sessions = newSessions
+            self.lastUpdate = Date()
+            if changed {
                 self.onUpdate?(self.sessions)
             }
         }
