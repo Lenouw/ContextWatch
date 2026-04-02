@@ -15,7 +15,7 @@
 - **Distribution** : GitHub Releases (Lenouw/ContextWatch) + appcast.xml signé EdDSA
 
 ## Dernière mise à jour
-2026-03-29 21h — v1.3.2 : audit sécurité, fix couleurs
+2026-04-01 — v1.3.3 : audit sécurité complet + fix couleurs illisibles
 
 ## Ce qu'on a fait
 - 2026-03-29 21h : **Audit sécurité + fix couleurs v1.3.2** — 8 vulnérabilités corrigées : cap mémoire 50MB countImages (HIGH), sanitisation displayName dans notifications (MEDIUM), suppression TOCTOU openProjectsFolder (MEDIUM), logging JSON errors via os_log (MEDIUM), suppression force-unwrap NotificationManager (LOW), FSEventStream passRetained + retain/release callbacks (LOW), cap imageCount display 9999 (LOW), print → os_log (INFO).
@@ -37,7 +37,7 @@
 - 2026-03-27 : App V1 + initialisation projet.
 
 ## Où on en est
-L'app est **complète, déployée (v1.3.1), et distribuable via Sparkle** :
+L'app est **complète, déployée (v1.3.3), et distribuable via Sparkle** :
 - Surveille en temps réel TOUTES les sessions Claude Code actives (fenêtre 48h)
 - Affiche le vrai pourcentage de contexte basé sur les token counts API (fix synthetic inclus)
 - **Compteur d'images intelligent** : détecte les dimensions réelles (PNG headers, estimation JPEG), alerte seulement si > 20 images ET au moins une > 2000px
@@ -54,7 +54,7 @@ L'app est **complète, déployée (v1.3.1), et distribuable via Sparkle** :
 ```
 ContextWatch/
   ContextWatch.xcodeproj/
-    project.pbxproj              — projet Xcode + Sparkle SPM, version 1.3.1 (build 5)
+    project.pbxproj              — projet Xcode + Sparkle SPM, version 1.3.3 (build 7)
   ContextWatch/
     ContextWatchApp.swift         — point d'entrée @main
     AppDelegate.swift             — menu coloré, Sparkle, clic session, compteur images
@@ -89,7 +89,7 @@ generate_icon.py                  — script Pillow pour le logo
 ## Problèmes connus
 - **Navigation onglet Claude Desktop impossible** : pas de deep link, pas de raccourci clavier, pas d'API
 - **Estimation JPEG imprécise** : sans parser les markers SOF du JPEG, on estime la taille via la longueur du base64 (seuil 400K chars). Peut avoir des faux négatifs sur des JPEG très compressés mais larges.
-- **Scan complet du .jsonl pour les images** : on lit le fichier entier à chaque cycle (peut être lent pour les très gros fichiers > 10Mo). Un cache serait souhaitable.
+- **Scan images limité à 50 Mo** : pour les très gros fichiers, on ne lit que les 50 derniers Mo — les images en début de très longue session pourraient être manquées. Un cache serait la vraie solution.
 
 ## Ce qu'il reste à faire
 - [x] Toutes les features de base (multi-sessions, tokens, couleurs, activité, Computer Use, Sparkle)
@@ -97,7 +97,9 @@ generate_icon.py                  — script Pillow pour le logo
 - [x] Fix messages synthetic
 - [x] Tri par activité
 - [x] Clic session → focus Claude Desktop
-- [x] Releases v1.1.0 → v1.3.1 publiées
+- [x] Releases v1.1.0 → v1.3.3 publiées
+- [x] Audit sécurité complet (8 vulnérabilités corrigées)
+- [x] Fix couleurs illisibles (ambre + gris argenté)
 - [ ] Tester les notifications de tokens aux seuils 80/90/100% en conditions réelles
 - [ ] Ajouter l'app au Login Items pour lancement automatique au démarrage
 - [ ] Cache pour le comptage d'images (éviter de relire le fichier entier à chaque scan)
